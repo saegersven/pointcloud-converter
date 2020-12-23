@@ -57,5 +57,5 @@ std::string get_directory(std::string file) {
 /// <returns>The path to the point file.</returns>
 std::string get_full_point_file(std::string hierarchy, std::string output_path, std::string hierarchy_prefix)
 {
-	return output_path + "/p" + hierarchy_prefix + hierarchy;
+	return output_path + "/p" + hierarchy_prefix + hierarchy + ".bin";
 }

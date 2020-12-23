@@ -97,7 +97,7 @@ int main(int argc, char** argv)
 
 	std::cout << "Distributing... ";
 	// Split points into eight smaller sets of points
-	SplitPointsMetadata splitPointsMetadata = r.split_points(bounding_cube, r.temp_point_path);
+	SplitPointsMetadata splitPointsMetadata = r.split_points(bounding_cube);
 
 	std::cout << "Done." << std::endl << std::endl << "Building octree..." << std::endl;
 
@@ -163,7 +163,7 @@ int main(int argc, char** argv)
 
 	std::cout << "Writing hierarchy... ";
 	
-	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy");
+	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
 
 	std::cout << "Done." << std::endl << std::endl;
 

@@ -5,9 +5,6 @@
 /// </summary>
 /// <param name="node">The root node of the tree</param>
 void Builder::split_node(Node* node) {
-	if (node->id == "041223") {
-		std::cout << std::endl;
-	}
 	if (node->num_points > max_node_size) {
 		FILE* points_file;
 		fopen_s(&points_file, get_full_point_file(node->id, output_path, "").c_str(), "rb");
@@ -36,7 +33,7 @@ void Builder::split_node(Node* node) {
 			num_child_points[index]++;
 			total_child_points++;
 		}
-		
+
 		node->child_nodes = new Node * [8];
 		for (int i = 0; i < 8; i++) {
 			fclose(child_point_files[i]);
@@ -59,8 +56,8 @@ void Builder::split_node(Node* node) {
 			}
 		}
 		fclose(points_file);
-		// Delete the points file and set number of points for this node to 0
 
+		// Delete the points file and set number of points for this node to 0
 		node->num_points = 0;
 		remove(get_full_point_file(node->id, output_path, "").c_str());
 	}
@@ -108,7 +105,7 @@ uint64_t Builder::sample(Node* node, uint32_t num_points, std::string output_pat
 				bool is_unique = true;
 				do {
 					point_index = lce() % node->child_nodes[i]->num_points;
-					
+
 					is_unique = true;
 					for (int k = 0; k < j; k++) {
 						if (point_indices[k] == point_index) {
@@ -121,7 +118,7 @@ uint64_t Builder::sample(Node* node, uint32_t num_points, std::string output_pat
 				point_indices[j] = point_index;
 
 				// Read this random point from the child file
-				fseek(child_point_files[i], point_index * 4 * 3, SEEK_SET);
+				fseek(child_point_files[i], point_index * 12, SEEK_SET);
 				Point p;
 				fread(&p, sizeof(p), 1, child_point_files[i]);
 				
@@ -146,7 +143,6 @@ void Builder::sample_tree(Node* node) {
 	if (node->child_nodes_mask) {
 		// This node has child nodes, which means it has no points yet and has to be sampled
 		// But maybe the child nodes aren't sampled either, so check if any of them has no points
-
 		for (int i = 0; i < 8; i++) {
 			if (node->child_nodes_mask & (1 << i)) {
 				// This child node exists

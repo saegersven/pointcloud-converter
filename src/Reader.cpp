@@ -50,7 +50,7 @@ Cube Reader::read_bounds() {
 		fwrite(&p, sizeof(p), 1, point_file);
 
 		// Read additional values
-		fin >> dummy;// >> dummy >> dummy >> dummy;
+		//fin >> dummy;// >> dummy >> dummy >> dummy;
 	}
 
 	fclose(point_file);
@@ -73,7 +73,7 @@ Cube Reader::read_bounds() {
 /// <param name="bounding_cube">The bounding cube of all points. Needed to determine which chunk a point belongs to.</param>
 /// <param name="point_file_path">The path to the point file</param>
 /// <returns>Data about the eight smaller chunks</returns>
-SplitPointsMetadata Reader::split_points(Cube bounding_cube, std::string point_file_path) {
+SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 	SplitPointsMetadata splitPointsMetadata;
 	splitPointsMetadata.bounding_cubes = std::vector<Cube>(8);
 
@@ -87,14 +87,14 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube, std::string point_f
 	}
 	
 	FILE* point_file;
-	fopen_s(&point_file, point_file_path.c_str(), "rb");
+	fopen_s(&point_file, get_full_point_file("", output_path, "").c_str(), "rb");
 	if (!point_file) throw std::exception("Could not read points");
 
 	std::vector<FILE*> point_files(8);
 	splitPointsMetadata.point_file_paths = std::vector<std::string>(8);
 
 	for (int i = 0; i < 8; i++) {
-		splitPointsMetadata.point_file_paths[i] = point_file_path + std::to_string(i);
+		splitPointsMetadata.point_file_paths[i] = get_full_point_file(std::to_string(i), output_path, "");
 		fopen_s(&point_files[i], splitPointsMetadata.point_file_paths[i].c_str(), "wb");
 		if (!point_files[i]) throw std::exception("Could not write points");
 	}
@@ -115,7 +115,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube, std::string point_f
 
 	fclose(point_file);
 
-	remove(point_file_path.c_str());
+	remove(get_full_point_file("", output_path, "").c_str());
 
 	return splitPointsMetadata;
 }
