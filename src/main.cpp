@@ -33,8 +33,8 @@ void write_node_to_hierarchy(Node* node, FILE* file, bool write_bounds) {
 	// child node mask: 8 bit bitmask
 	// + Child nodes recursively
 
-	// id can be calculated
-	// Bounds can be calculated for every node except the root node
+	// id will be calculated at runtime
+	// Bounds will be calculated at runtime for every node except the root node
 	if (write_bounds) {
 		fwrite(&node->bounds.center_x, sizeof(float), 1, file);
 		fwrite(&node->bounds.center_y, sizeof(float), 1, file);
@@ -149,7 +149,7 @@ int main(int argc, char** argv)
 			std::cout << std::endl << "Could not fetch results of thread " << i << std::endl;
 			delete root_node;
 			fail(ERR_CODE_BUILDER_THREAD);
-			return 0; // Will not be reached
+			return 0;
 		}
 
 		root_node->child_nodes_mask |= ((splitPointsMetadata.num_points[i] == 0 ? 0 : 1) << i);

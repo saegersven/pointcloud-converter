@@ -101,12 +101,14 @@ uint64_t Builder::sample(Node* node, uint32_t num_points, std::string output_pat
 
 			std::vector<uint32_t> point_indices(sample_from_this_node);
 
+			std::minstd_rand lce; // linear_congrential_engine
 			for (int j = 0; j < sample_from_this_node; j++) {
 				// Generate a random index that has not been generated before
 				int point_index;
 				bool is_unique = true;
 				do {
-					point_index = rand() % node->child_nodes[i]->num_points;
+					point_index = lce() % node->child_nodes[i]->num_points;
+					
 					is_unique = true;
 					for (int k = 0; k < j; k++) {
 						if (point_indices[k] == point_index) {
