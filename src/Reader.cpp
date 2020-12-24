@@ -86,9 +86,9 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		splitPointsMetadata.bounding_cubes[i] = c;
 	}
 	
-	FILE* point_file;
+	/*FILE* point_file;
 	fopen_s(&point_file, get_full_point_file("", output_path, "").c_str(), "rb");
-	if (!point_file) throw std::exception("Could not read points");
+	if (!point_file) throw std::exception("Could not read points");*/
 
 	std::vector<FILE*> point_files(8);
 	splitPointsMetadata.point_file_paths = std::vector<std::string>(8);
@@ -99,7 +99,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		if (!point_files[i]) throw std::exception("Could not write points");
 	}
 
-	Point p;
+	/*Point p;
 	while (fread(&p, sizeof(p), 1, point_file)) {
 		int index = 0;
 		index |= (p.x > bounding_cube.center_x) ? (1 << 2) : 0;
@@ -107,13 +107,33 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		index |= (p.z > bounding_cube.center_z) ? (1 << 0) : 0;
 		fwrite(&p, sizeof(p), 1, point_files[index]);
 		splitPointsMetadata.num_points[index]++;
+	}*/
+
+	BufferedPointReader reader(get_full_point_file("", output_path, ""), 500'000);
+	reader.start_reading();
+
+	std::vector<Point> points;
+	uint64_t num_points = 0;
+	while (!reader.is_reading()); // Wait for reader to start reading
+	while (reader.points_available()) {
+		reader.swap_and_get(points, num_points);
+
+		for (uint64_t i = 0; i < num_points; i++) {
+			uint8_t index = 0;
+			index |= (points[i].x > bounding_cube.center_x) ? (1 << 2) : 0;
+			index |= (points[i].y > bounding_cube.center_y) ? (1 << 1) : 0;
+			index |= (points[i].z > bounding_cube.center_z) ? (1 << 0) : 0;
+			fwrite(&points[0], sizeof(struct Point), 1, point_files[index]);
+			splitPointsMetadata.num_points[index]++;
+		}
 	}
+	reader.cleanup();
 
 	for (int i = 0; i < 8; i++) {
 		fclose(point_files[i]);
 	}
 
-	fclose(point_file);
+	//fclose(point_file);
 
 	remove(get_full_point_file("", output_path, "").c_str());
 

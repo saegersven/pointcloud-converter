@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <vector>
 #include "Data.h"
+#include "BufferedPointReader.h"
 
 class Reader
 {
