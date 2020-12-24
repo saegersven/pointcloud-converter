@@ -35,7 +35,14 @@ void BufferedPointReader::swap_and_get(std::vector<Point>& buf, uint64_t& num_po
 
 void BufferedPointReader::read_async() {
 	FILE* file;
-	if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
+	std::ifstream* fin;
+	if (binary) {
+		if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
+	}
+	else {
+		fin = &std::ifstream(file_path);
+		if (!fin->is_open()) throw std::exception("Could not open file");
+	}
 
 	write_buffer->buffer_lock.lock();
 	bool c = true;
@@ -45,10 +52,18 @@ void BufferedPointReader::read_async() {
 		Point p;
 		// Read until the point limit or eof is reached.
 		while (write_buffer->buffer_size < point_limit) {
-			if (!fread(&p, sizeof(struct Point), 1, file)) {
-				// Reached end of file
-				c = false;
-				break;
+			if (binary) {
+				if (!fread(&p, sizeof(struct Point), 1, file)) {
+					// Reached end of file
+					c = false;
+					break;
+				}
+			}
+			else {
+				if (!(*fin >> p.x >> p.y >> p.z)) {
+					c = false;
+					break;
+				}
 			}
 			write_buffer->buffer[write_buffer->buffer_size] = p;
 			write_buffer->buffer_size++;
@@ -68,7 +83,12 @@ void BufferedPointReader::read_async() {
 		write_buffer->buffer_lock.lock();
 	}
 	write_buffer->buffer_lock.unlock();
-	fclose(file);
+	if (binary) {
+		fclose(file);
+	}
+	else {
+		fin->close();
+	}
 
 	status_lock.lock();
 	_is_reading = false;
@@ -86,7 +106,7 @@ void BufferedPointReader::start_reading() {
 	read_thread.detach();
 }
 
-BufferedPointReader::BufferedPointReader(std::string file_path, uint64_t point_limit)
+BufferedPointReader::BufferedPointReader(bool binary, std::string file_path, uint64_t point_limit)
 	: buffer0(point_limit), buffer1(point_limit) {
 
 	write_buffer_b = false;
@@ -94,6 +114,7 @@ BufferedPointReader::BufferedPointReader(std::string file_path, uint64_t point_l
 	write_buffer = get_buffer(write_buffer_b);
 	read_buffer = get_buffer(read_buffer_b);
 
+	this->binary = binary;
 	this->file_path = file_path;
 	this->point_limit = point_limit;
 

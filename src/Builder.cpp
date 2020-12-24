@@ -177,12 +177,11 @@ Node* Builder::build()
 	return node;
 }
 
-Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_path, std::string point_path,
+Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
 	std::string hierarchy_prefix, uint32_t max_node_size, uint32_t sampled_node_size) {
 	this->bounding_cube = bounding_cube;
 	this->num_points = num_points;
 	this->output_path = output_path;
-	this->point_path = point_path;
 	this->hierarchy_prefix = hierarchy_prefix;
 	this->max_node_size = max_node_size;
 	this->sampled_node_size = sampled_node_size;

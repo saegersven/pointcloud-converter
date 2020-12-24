@@ -1,6 +1,7 @@
 #include "Data.h"
 #include <mutex>
 #include <future>
+#include <fstream>
 
 struct SharedPointBuffer {
 	std::vector<Point> buffer;
@@ -14,6 +15,8 @@ struct SharedPointBuffer {
 
 class BufferedPointReader {
 private:
+	bool binary;
+
 	std::mutex status_lock;
 	bool _points_available_0;
 	bool _points_available_1;
@@ -37,7 +40,7 @@ private:
 	void read_async();
 public:
 	void swap_and_get(std::vector<Point>& buf, uint64_t& num_points);
-	BufferedPointReader(std::string file_path, uint64_t point_limit);
+	BufferedPointReader(bool binary, std::string file_path, uint64_t point_limit);
 	void cleanup();
 	void start_reading();
 	bool points_available();

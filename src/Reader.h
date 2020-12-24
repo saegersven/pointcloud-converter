@@ -3,8 +3,11 @@
 #include <fstream>
 #include <filesystem>
 #include <vector>
+#include <iostream>
+#include <chrono>
 #include "Data.h"
 #include "BufferedPointReader.h"
+#include "BufferedPointWriter.h"
 
 class Reader
 {

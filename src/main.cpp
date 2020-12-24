@@ -114,7 +114,7 @@ int main(int argc, char** argv)
 		}
 		std::string hierarchy_prefix = std::to_string(i);
 		Builder b(splitPointsMetadata.bounding_cubes[i], splitPointsMetadata.num_points[i], argv[2],
-			splitPointsMetadata.point_file_paths[i], hierarchy_prefix, MAX_NODE_SIZE, SAMPLED_NODE_SIZE);
+			hierarchy_prefix, MAX_NODE_SIZE, SAMPLED_NODE_SIZE);
 		// Start building
 		future_trees[i] = std::async(std::launch::async, [](Builder b) {
 			return b.build();
