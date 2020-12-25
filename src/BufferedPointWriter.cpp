@@ -54,7 +54,7 @@ void BufferedPointWriter::done() {
 	status_lock.unlock();
 }
 
-void BufferedPointWriter::schedule_points(std::string hierarchy, std::vector<Point>& points) {
+void BufferedPointWriter::schedule_points(std::string hierarchy, std::vector<Point> points) {
 	to_write_lock.lock();
 	if (to_write.find(hierarchy) != to_write.end()) {
 		// Append points

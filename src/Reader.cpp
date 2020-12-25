@@ -12,11 +12,11 @@ Reader::Reader(std::string input_path, std::string output_path)
 /// </summary>
 /// <returns>An AABB that surrounds all points</returns>
 Cube Reader::read_bounds() {
-	std::ifstream fin(input_path);
+	//std::ifstream fin(input_path);
 
 	Bounds bounds;
 
-	if (!fin.is_open()) throw std::exception("Could not read points");
+	//if (!fin.is_open()) throw std::exception("Could not read points");
 
 	// To make reading faster for the next step, copy the contents of this file into a binary file
 	temp_point_path = get_full_point_file("", output_path, "");
@@ -27,44 +27,46 @@ Cube Reader::read_bounds() {
 
 	fseek(point_file, 0, SEEK_SET);*/
 
+	BufferedPointReader reader(FILE_FORMAT_LAS227, input_path, 40'000);
+
 	BufferedPointWriter writer(output_path, 1024);
 
-	uint64_t num_points;
-	fin >> num_points;
-
-	Point p;
+	/*uint64_t num_points;
+	fin >> num_points;*/
 
 	const uint64_t WRITE_THRESHOLD = 1024;
 	std::vector<Point> point_buffer(WRITE_THRESHOLD);
 
-	int dummy;
-	fin >> dummy; // Read number of points first
-
 	writer.start_writing();
+	reader.start_reading();
 
-	int i = 0;
-	for (; (fin >> p.x >> p.y >> p.z); i++) {
-		if (i != 0 && i % WRITE_THRESHOLD == 0) {
-			writer.schedule_points("", point_buffer);
+	std::vector<Point> points;
+	uint64_t num_points = 0;
+	uint64_t total_points = 0;
+
+	while (!reader.is_reading());
+	while (reader.is_reading() || reader.points_available()) {
+		reader.swap_and_get(points, num_points);
+
+		for (uint64_t i = 0; i < num_points; i++) {
+			if (points[i].x < bounds.min_x) bounds.min_x = points[i].x;
+			if (points[i].x > bounds.max_x) bounds.max_x = points[i].x;
+
+			if (points[i].y < bounds.min_y) bounds.min_y = points[i].y;
+			if (points[i].y > bounds.max_y) bounds.max_y = points[i].y;
+
+			if (points[i].z < bounds.min_z) bounds.min_z = points[i].z;
+			if (points[i].z > bounds.max_z) bounds.max_z = points[i].z;
+
+			//fwrite(&p, sizeof(p), 1, point_file);
+			total_points++;
 		}
-
-		if (p.x < bounds.min_x) bounds.min_x = p.x;
-		if (p.x > bounds.max_x) bounds.max_x = p.x;
-
-		if (p.y < bounds.min_y) bounds.min_y = p.y;
-		if (p.y > bounds.max_y) bounds.max_y = p.y;
-
-		if (p.z < bounds.min_z) bounds.min_z = p.z;
-		if (p.z > bounds.max_z) bounds.max_z = p.z;
-
-		//fwrite(&p, sizeof(p), 1, point_file);
-		point_buffer[i % WRITE_THRESHOLD] = p;
-
-		// Read additional values
-		fin >> dummy >> dummy >> dummy >> dummy;
+		writer.schedule_points("", points);
+		points.clear();
 	}
-	point_buffer.resize(i % WRITE_THRESHOLD);
-	writer.schedule_points("", point_buffer); // Schedule the rest of the points
+	reader.cleanup();
+	/*point_buffer.resize(i % WRITE_THRESHOLD);
+	writer.schedule_points("", point_buffer); // Schedule the rest of the points*/
 	writer.done();
 
 	while (!writer.finished()); // Wait until the writer has finished cleaning up before it gets destroyed
@@ -123,14 +125,14 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		splitPointsMetadata.num_points[index]++;
 	}*/
 
-	BufferedPointReader reader(get_full_point_file("", output_path, ""), 200'000);
+	BufferedPointReader reader(true, get_full_point_file("", output_path, ""), 200'000);
 	reader.start_reading();
 
 	BufferedPointWriter writer(output_path, 4096);
 	writer.start_writing();
 
 	std::vector<std::vector<Point>> local_buf(8);
-	for (int i = 0; i < 8; i++) {
+	for (uint8_t i = 0; i < 8; i++) {
 		local_buf[i].reserve(200'000);
 	}
 
@@ -151,7 +153,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 			//fwrite(&points[0], sizeof(struct Point), 1, point_files[index]);
 			splitPointsMetadata.num_points[index]++;
 		}
-		for (int i = 0; i < 8; i++) {
+		for (uint8_t i = 0; i < 8; i++) {
 			writer.schedule_points(std::to_string(i), local_buf[i]);
 			local_buf[i].clear();
 		}
