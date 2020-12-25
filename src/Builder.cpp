@@ -6,15 +6,14 @@
 /// <param name="node">The root node of the tree</param>
 void Builder::split_node(Node* node) {
 	if (node->num_points > max_node_size) {
-		FILE* points_file;
-		fopen_s(&points_file, get_full_point_file(node->id, output_path, "").c_str(), "rb");
+		FILE* points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "rb");
 
 		if (!points_file) throw std::exception("Could not open file");
 
 		FILE* child_point_files[8];
 		for (int i = 0; i < 8; i++) {
 			std::string file_path = get_full_point_file(std::to_string(i), output_path, node->id);
-			fopen_s(&child_point_files[i], file_path.c_str(), "ab");
+			child_point_files[i] = fopen(file_path.c_str(), "ab");
 
 			if (!child_point_files[i]) throw std::exception("Could not open file");
 		}
@@ -72,8 +71,8 @@ void Builder::split_node(Node* node) {
 /// <param name="hierarchy_prefix">Prefix to be added before the node's hierarchy</param>
 /// <returns>The actual number of points sampled. Can be smaller than num_points if the child nodes don't contain enough points</returns>
 uint64_t Builder::sample(Node* node, uint32_t num_points, std::string output_path) {
-	FILE* points_file;
-	if (fopen_s(&points_file, get_full_point_file(node->id, output_path, "").c_str(), "ab") != NULL)
+	FILE* points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "ab");
+	if (!points_file)
 		throw std::exception("Failed to open file");
 
 	FILE* child_point_files[8] = {};
@@ -84,7 +83,8 @@ uint64_t Builder::sample(Node* node, uint32_t num_points, std::string output_pat
 			total_child_points += node->child_nodes[i]->num_points;
 
 			std::string child_node_path = get_full_point_file(std::to_string(i), output_path, node->id);
-			if(fopen_s(&child_point_files[i], child_node_path.c_str(), "rb") != NULL)
+			child_point_files[i] = fopen(child_node_path.c_str(), "rb");
+			if(!child_point_files[i])
 				throw std::exception("Failed to open file");
 		}
 	}

@@ -1,48 +1,41 @@
-#include "Data.h"
+#include <string>
 #include <mutex>
-#include <future>
-#include <fstream>
-
-struct SharedPointBuffer {
-	std::vector<Point> buffer;
-	uint64_t buffer_size;
-	std::mutex buffer_lock;
-
-	SharedPointBuffer(uint64_t size) : buffer(size) {
-		buffer_size = 0;
-	}
-};
+#include "Data.h"
 
 class BufferedPointReader {
 private:
-	bool binary;
+	std::string file;
+	uint8_t format;
+	uint64_t buffer_size;
 
-	std::mutex status_lock;
-	bool _points_available_0;
-	bool _points_available_1;
+	uint64_t points_in_buffer;
 
-	bool _is_reading;
+	FILE* bin_file;
 
-	std::string file_path;
-	uint64_t point_limit;
+	std::mutex buffer_lock;
+	Point** public_buffer;
+	Point** private_buffer;
+	bool _public_buffer;
 
-	SharedPointBuffer buffer0;
-	SharedPointBuffer buffer1;
+	Point* buffer0;
+	Point* buffer1;
 
-	SharedPointBuffer* read_buffer;
-	SharedPointBuffer* write_buffer;
+	bool _points_available;
+	bool _eof;
 
-	bool read_buffer_b;
-	bool write_buffer_b;
+	bool read_point_raw(Point& p);
+	bool open_file_raw();
 
-	SharedPointBuffer* get_buffer(bool write);
-	void swap(bool write);
-	void read_async();
+	void read();
+	void swap_buffers(uint64_t num_points);
+
 public:
-	void swap_and_get(std::vector<Point>& buf, uint64_t& num_points);
-	BufferedPointReader(bool binary, std::string file_path, uint64_t point_limit);
-	void cleanup();
-	void start_reading();
+	BufferedPointReader(std::string file, uint8_t format, uint64_t buffer_size);
+	void start();
+
+	uint64_t start_reading(Point*& buffer);
+	void stop_reading();
+
 	bool points_available();
-	bool is_reading();
+	bool eof();
 };

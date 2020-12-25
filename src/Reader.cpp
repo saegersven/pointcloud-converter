@@ -61,7 +61,7 @@ Cube Reader::read_bounds() {
 		point_buffer[i % WRITE_THRESHOLD] = p;
 
 		// Read additional values
-		fin >> dummy >> dummy >> dummy >> dummy;
+		//fin >> dummy >> dummy >> dummy >> dummy;
 	}
 	point_buffer.resize(i % WRITE_THRESHOLD);
 	writer.schedule_points("", point_buffer); // Schedule the rest of the points
@@ -123,8 +123,8 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		splitPointsMetadata.num_points[index]++;
 	}*/
 
-	BufferedPointReader reader(get_full_point_file("", output_path, ""), 200'000);
-	reader.start_reading();
+	BufferedPointReader reader(get_full_point_file("", output_path, ""), POINT_FILE_FORMAT_RAW, 200'000);
+	reader.start();
 
 	BufferedPointWriter writer(output_path, 4096);
 	writer.start_writing();
@@ -134,13 +134,9 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		local_buf[i].reserve(200'000);
 	}
 
-	std::vector<Point> points;
+	Point* points;
 	uint64_t num_points = 0;
-	while (!reader.is_reading()); // Wait for reader to start reading
-	while (reader.is_reading() || reader.points_available()) {
-		while (!reader.points_available()); // Wait for points to be loaded
-		reader.swap_and_get(points, num_points);
-
+	while (num_points = reader.start_reading(points)) { // reader.start_reading will return 0 if all points have been read
 		for (uint64_t i = 0; i < num_points; i++) {
 			uint8_t index = 0;
 			index |= (points[i].x > bounding_cube.center_x) ? (1 << 2) : 0;
@@ -151,12 +147,12 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 			//fwrite(&points[0], sizeof(struct Point), 1, point_files[index]);
 			splitPointsMetadata.num_points[index]++;
 		}
+		reader.stop_reading();
 		for (int i = 0; i < 8; i++) {
 			writer.schedule_points(std::to_string(i), local_buf[i]);
 			local_buf[i].clear();
 		}
 	}
-	reader.cleanup();
 	writer.done();
 
 	while (!writer.finished()); // Wait until writer is finished cleaning up

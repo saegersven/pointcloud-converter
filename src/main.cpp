@@ -55,9 +55,9 @@ void write_node_to_hierarchy(Node* node, FILE* file, bool write_bounds) {
 }
 
 void write_hierarchy(Node* root_node, std::string path) {
-	FILE* hierarchy_file;
+	FILE* hierarchy_file = fopen(path.c_str(), "wb");
 
-	if (fopen_s(&hierarchy_file, path.c_str(), "wb") != NULL || !hierarchy_file) {
+	if (!hierarchy_file) {
 		fail(ERR_CODE_HIERARCHY);
 		return;
 	}

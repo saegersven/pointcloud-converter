@@ -2,6 +2,10 @@
 #include <vector>
 #include <string>
 
+#define POINT_FILE_FORMAT_LAS 0
+#define POINT_FILE_FORMAT_RAW 1
+#define POINT_FILE_FORMAT_PTS 2
+
 struct Point {
 	float x;
 	float y;
