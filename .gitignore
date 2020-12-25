@@ -1,8 +1,4 @@
 x64
-<<<<<<< HEAD
 PointCloudConverter.vcxproj*
 build
 PointCloudConverter.sln
-=======
-PointCloudConverter.vcxproj*
->>>>>>> parent of 40c21ca... Added cmake
