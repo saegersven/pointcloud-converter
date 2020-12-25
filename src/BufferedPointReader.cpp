@@ -35,6 +35,7 @@ void BufferedPointReader::swap_and_get(std::vector<Point>& buf, uint64_t& num_po
 
 void BufferedPointReader::read_async() {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	FILE* file = nullptr;
 
 	double las_scale_x, las_scale_y, las_scale_z = 0.0;
@@ -65,10 +66,15 @@ void BufferedPointReader::read_async() {
 			fseek(file, 227, SEEK_SET);
 		}
 =======
+=======
+>>>>>>> parent of 40c21ca... Added cmake
 	FILE* file;
 	std::ifstream* fin;
 	if (binary) {
 		if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
+<<<<<<< HEAD
+>>>>>>> parent of 40c21ca... Added cmake
+=======
 >>>>>>> parent of 40c21ca... Added cmake
 	}
 	else {
