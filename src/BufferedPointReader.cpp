@@ -46,7 +46,13 @@ void BufferedPointReader::read_async() {
 
 	int dummy;
 	if (format == FILE_FORMAT_RAW || format == FILE_FORMAT_LAS227) {
-		if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
+#ifdef _BUILD_CMAKE
+		file = fopen(file_path.c_str(), "rb");
+#else
+		if (fopen_s(&file, file_path.c_str(), "rb") != NULL) throw std::exception("Could not open file");
+#endif
+		if(!file) throw std::exception("Could not open file");
+
 		if (format == FILE_FORMAT_LAS227) {
 			fseek(file, 107, SEEK_SET);
 			fread(&las_num_points, sizeof(las_num_points), 1, file);

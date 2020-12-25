@@ -23,7 +23,13 @@ void BufferedPointWriter::write() {
 
 		while (it != to_write.end()) {
 			FILE* f;
-			if(fopen_s(&f, get_full_point_file(it->first, output_path, "").c_str(), "ab") != NULL || !f)
+#ifdef _BUILD_CMAKE
+			f = fopen(get_full_point_file(it->first, output_path, ""));
+			bool file_open = f;
+#else
+			bool file_open = fopen_s(&f, get_full_point_file(it->first, output_path, "").c_str(), "ab") == NULL && f;
+#endif
+			if(!file_open)
 				throw std::exception("Could not open file");
 
 			fwrite(&it->second[0], sizeof(struct Point), it->second.size(), f); // Write points

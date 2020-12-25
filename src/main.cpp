@@ -57,7 +57,14 @@ void write_node_to_hierarchy(Node* node, FILE* file, bool write_bounds) {
 void write_hierarchy(Node* root_node, std::string path) {
 	FILE* hierarchy_file;
 
-	if (fopen_s(&hierarchy_file, path.c_str(), "wb") != NULL || !hierarchy_file) {
+#ifdef _BUILD_CMAKE
+	hierarchy_file = fopen(path.c_str(), "wb");
+	bool file_open = hierarchy_file;
+#else
+	bool file_open = fopen_s(&hierarchy_file, path.c_str(), "wb") == NULL && hierarchy_file;
+#endif
+
+	if (!file_open) {
 		fail(ERR_CODE_HIERARCHY);
 		return;
 	}

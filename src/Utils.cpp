@@ -21,7 +21,14 @@ bool is_directory_empty(const std::string& path) {
 /// <returns>true if the file can be opened, false otherwise.</returns>
 bool check_file(const std::string& filename) {
 	FILE* file;
-	if (fopen_s(&file, filename.c_str(), "r") == NULL && file) {
+
+#ifdef _BUILD_CMAKE
+	file = fopen(filename.c_str(), "r");
+	bool c = file;
+#else
+	bool c = fopen_s(&file, filename.c_str(), "r") == NULL && file;
+#endif
+	if () {
 		fclose(file);
 		return true;
 	}
