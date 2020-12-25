@@ -28,7 +28,7 @@ bool check_file(const std::string& filename) {
 #else
 	bool c = fopen_s(&file, filename.c_str(), "r") == NULL && file;
 #endif
-	if () {
+	if (c) {
 		fclose(file);
 		return true;
 	}
