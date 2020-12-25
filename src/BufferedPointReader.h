@@ -3,10 +3,6 @@
 #include <future>
 #include <fstream>
 
-#define FILE_FORMAT_PTS 0
-#define FILE_FORMAT_RAW 1
-#define FILE_FORMAT_LAS227 2
-
 struct SharedPointBuffer {
 	std::vector<Point> buffer;
 	uint64_t buffer_size;
@@ -19,10 +15,7 @@ struct SharedPointBuffer {
 
 class BufferedPointReader {
 private:
-	// 0 for pts
-	// 1 for raw binary float XYZ
-	// 2 for las with header size 227
-	uint8_t format;
+	bool binary;
 
 	std::mutex status_lock;
 	bool _points_available_0;
@@ -47,7 +40,7 @@ private:
 	void read_async();
 public:
 	void swap_and_get(std::vector<Point>& buf, uint64_t& num_points);
-	BufferedPointReader(uint8_t format, std::string file_path, uint64_t point_limit);
+	BufferedPointReader(bool binary, std::string file_path, uint64_t point_limit);
 	void cleanup();
 	void start_reading();
 	bool points_available();

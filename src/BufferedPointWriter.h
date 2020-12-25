@@ -22,7 +22,7 @@ public:
 	BufferedPointWriter(std::string output_path, uint64_t write_threshold);
 	void start_writing();
 	void done();
-	void schedule_points(std::string hierarchy, std::vector<Point> points);
+	void schedule_points(std::string hierarchy, std::vector<Point>& points);
 
 	bool finished();
 };

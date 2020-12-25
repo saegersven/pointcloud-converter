@@ -1,0 +1,3 @@
+C:/pcc/pcc/PointCloudConverter/PointCloudConverter/build/CMakeFiles/ALL_BUILD.dir
+C:/pcc/pcc/PointCloudConverter/PointCloudConverter/build/CMakeFiles/ZERO_CHECK.dir
+C:/pcc/pcc/PointCloudConverter/PointCloudConverter/build/src/CMakeFiles/pcc.dir

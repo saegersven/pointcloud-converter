@@ -23,7 +23,6 @@ void BufferedPointReader::swap_and_get(std::vector<Point>& buf, uint64_t& num_po
 	buf = read_buffer->buffer;
 	num_points = read_buffer->buffer_size;
 
-	status_lock.lock();
 	if (read_buffer_b) {
 		_points_available_1 = false;
 	}
@@ -31,11 +30,11 @@ void BufferedPointReader::swap_and_get(std::vector<Point>& buf, uint64_t& num_po
 		_points_available_0 = false;
 	}
 
-	if (!_is_reading && !_points_available_0 && !_points_available_1) read_buffer->buffer_lock.unlock();
-	status_lock.unlock();
+	if (!_is_reading) read_buffer->buffer_lock.unlock();
 }
 
 void BufferedPointReader::read_async() {
+<<<<<<< HEAD
 	FILE* file = nullptr;
 
 	double las_scale_x, las_scale_y, las_scale_z = 0.0;
@@ -65,12 +64,16 @@ void BufferedPointReader::read_async() {
 
 			fseek(file, 227, SEEK_SET);
 		}
+=======
+	FILE* file;
+	std::ifstream* fin;
+	if (binary) {
+		if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
+>>>>>>> parent of 40c21ca... Added cmake
 	}
-	else if(format == FILE_FORMAT_PTS) {
-		fin = std::ifstream(file_path);
-		if (!fin.is_open()) throw std::exception("Could not open file");
-		
-		fin.ignore(256, '\n'); // Ignore number of points
+	else {
+		fin = &std::ifstream(file_path);
+		if (!fin->is_open()) throw std::exception("Could not open file");
 	}
 
 	write_buffer->buffer_lock.lock();
@@ -81,38 +84,18 @@ void BufferedPointReader::read_async() {
 		Point p;
 		// Read until the point limit or eof is reached.
 		while (write_buffer->buffer_size < point_limit) {
-			if (format == FILE_FORMAT_RAW) {
+			if (binary) {
 				if (!fread(&p, sizeof(struct Point), 1, file)) {
 					// Reached end of file
 					c = false;
 					break;
 				}
 			}
-			else if (format == FILE_FORMAT_LAS227) {
-				int32_t x, y, z;
-				fread(&x, sizeof(x), 1, file);
-				fread(&y, sizeof(y), 1, file);
-				fread(&z, sizeof(z), 1, file);
-
-				fseek(file, 22, SEEK_CUR);
-
-				p.x = (double)x * las_scale_x;
-				p.y = (double)y * las_scale_y;
-				p.z = (double)z * las_scale_z;
-
-				las_points_read++;
-
-				if (las_points_read == las_num_points) {
+			else {
+				if (!(*fin >> p.x >> p.y >> p.z)) {
 					c = false;
 					break;
 				}
-			}
-			else if(format == FILE_FORMAT_PTS) {
-				if (!(fin >> p.x >> p.y >> p.z)) {
-					c = false;
-					break;
-				}
-				//for (int i = 0; i < 4; i++) fin.ignore(256, ' ');
 			}
 			write_buffer->buffer[write_buffer->buffer_size] = p;
 			write_buffer->buffer_size++;
@@ -132,11 +115,11 @@ void BufferedPointReader::read_async() {
 		write_buffer->buffer_lock.lock();
 	}
 	write_buffer->buffer_lock.unlock();
-	if (format == FILE_FORMAT_RAW) {
+	if (binary) {
 		fclose(file);
 	}
-	else if(format == FILE_FORMAT_PTS) {
-		fin.close();
+	else {
+		fin->close();
 	}
 
 	status_lock.lock();
@@ -144,8 +127,6 @@ void BufferedPointReader::read_async() {
 	status_lock.unlock();
 
 	while (points_available()); // Wait until all points have been read
-	status_lock.lock();
-	status_lock.unlock();
 }
 
 void BufferedPointReader::start_reading() {
@@ -157,7 +138,7 @@ void BufferedPointReader::start_reading() {
 	read_thread.detach();
 }
 
-BufferedPointReader::BufferedPointReader(uint8_t format, std::string file_path, uint64_t point_limit)
+BufferedPointReader::BufferedPointReader(bool binary, std::string file_path, uint64_t point_limit)
 	: buffer0(point_limit), buffer1(point_limit) {
 
 	write_buffer_b = false;
@@ -165,7 +146,7 @@ BufferedPointReader::BufferedPointReader(uint8_t format, std::string file_path, 
 	write_buffer = get_buffer(write_buffer_b);
 	read_buffer = get_buffer(read_buffer_b);
 
-	this->format = format;
+	this->binary = binary;
 	this->file_path = file_path;
 	this->point_limit = point_limit;
 
