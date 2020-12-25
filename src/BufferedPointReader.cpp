@@ -34,54 +34,10 @@ void BufferedPointReader::swap_and_get(std::vector<Point>& buf, uint64_t& num_po
 }
 
 void BufferedPointReader::read_async() {
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-	FILE* file = nullptr;
-
-	double las_scale_x, las_scale_y, las_scale_z = 0.0;
-	uint32_t las_num_points = 0;
-	uint32_t las_points_read = 0;
-
-	std::ifstream fin;
-
-	int dummy;
-	if (format == FILE_FORMAT_RAW || format == FILE_FORMAT_LAS227) {
-#ifdef _BUILD_CMAKE
-		file = fopen(file_path.c_str(), "rb");
-#else
-		if (fopen_s(&file, file_path.c_str(), "rb") != NULL) throw std::exception("Could not open file");
-#endif
-		if(!file) throw std::exception("Could not open file");
-
-		if (format == FILE_FORMAT_LAS227) {
-			fseek(file, 107, SEEK_SET);
-			fread(&las_num_points, sizeof(las_num_points), 1, file);
-
-			fseek(file, 131, SEEK_SET);
-			// Read scale
-			fread(&las_scale_x, sizeof(double), 1, file);
-			fread(&las_scale_y, sizeof(double), 1, file);
-			fread(&las_scale_z, sizeof(double), 1, file);
-
-			fseek(file, 227, SEEK_SET);
-		}
-=======
-=======
->>>>>>> parent of 40c21ca... Added cmake
-=======
->>>>>>> parent of 40c21ca... Added cmake
 	FILE* file;
 	std::ifstream* fin;
 	if (binary) {
 		if (fopen_s(&file, file_path.c_str(), "rb") != NULL || !file) throw std::exception("Could not open file");
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> parent of 40c21ca... Added cmake
-=======
->>>>>>> parent of 40c21ca... Added cmake
-=======
->>>>>>> parent of 40c21ca... Added cmake
 	}
 	else {
 		fin = &std::ifstream(file_path);

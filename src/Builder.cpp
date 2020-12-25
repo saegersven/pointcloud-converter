@@ -7,22 +7,14 @@
 void Builder::split_node(Node* node) {
 	if (node->num_points > max_node_size) {
 		FILE* points_file;
-#ifdef _BUILD_CMAKE
-		points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "rb");
-#else
 		fopen_s(&points_file, get_full_point_file(node->id, output_path, "").c_str(), "rb");
-#endif
 
 		if (!points_file) throw std::exception("Could not open file");
 
 		FILE* child_point_files[8];
 		for (int i = 0; i < 8; i++) {
 			std::string file_path = get_full_point_file(std::to_string(i), output_path, node->id);
-#ifdef _BUILD_CMAKE
-			child_point_files[i] = fopen(file_path.c_str(), "ab");
-#else
 			fopen_s(&child_point_files[i], file_path.c_str(), "ab");
-#endif
 
 			if (!child_point_files[i]) throw std::exception("Could not open file");
 		}
