@@ -17,6 +17,9 @@ private:
 
 	void split_node(Node* node);
 	void sample_tree(Node* node);
+
+	void split_node_in_core(Node* node);
+	void load_points(Node* node);
 public:
 	// Sample the children of this node into the node
 	static uint64_t sample(Node* node, uint32_t num_points, std::string output_path);

@@ -31,6 +31,7 @@ struct Node {
 	Cube bounds;
 	std::string id;
 	uint64_t num_points;
+	std::vector<Point> points; // Only used when splitting points in-core
 	// Bit mask, the rightmost bit is the first node, the leftmost corresponds to the eighth child node
 	uint8_t child_nodes_mask;
 	// Indices of the nodes:

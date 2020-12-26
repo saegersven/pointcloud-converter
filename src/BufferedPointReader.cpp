@@ -32,21 +32,85 @@ void BufferedPointReader::swap_buffers(uint64_t num_points) { // Only called by 
 	buffer_lock.unlock();
 }
 
-bool BufferedPointReader::read_point_raw(Point& p) {
-	return fread(&p, sizeof(p), 1, bin_file);
+// RAW POINT FILES
+bool BufferedPointReader::read_point_raw(FILE* f, Point& p) {
+	return fread(&p, sizeof(p), 1, f);
 }
 
-bool BufferedPointReader::open_file_raw() {
-	bin_file = fopen(file.c_str(), "rb");
-	return bin_file;
+bool BufferedPointReader::open_file_raw(FILE*& f) {
+	f = fopen(file.c_str(), "rb");
+	return f;
+}
+
+// LAS POINT FILE
+bool BufferedPointReader::read_point_las(FILE* f, Point& p) {
+	if (las_num_points == las_total_points) return false;
+
+	int32_t x, y, z;
+	bool c = fread(&x, sizeof(int32_t), 1, f);
+	bool d = fread(&y, sizeof(int32_t), 1, f);
+	bool e = fread(&z, sizeof(int32_t), 1, f);
+	fseek(f, las_skip_bytes, SEEK_CUR);
+
+	/*// No offset, because the coordinates will become very big with some point clouds
+	p.x = x * las_scale_x + las_offset_x;
+	p.y = y * las_scale_y + las_offset_y;
+	p.z = z * las_scale_z + las_offset_z;
+	*/
+	p.x = x * las_scale_x;
+	p.y = y * las_scale_y;
+	p.z = z * las_scale_z;
+
+	las_num_points++;
+
+	return c && d && e;
+}
+
+bool BufferedPointReader::open_file_las(FILE*& f) {
+	f = fopen(file.c_str(), "rb");
+	if (!f) return false;
+
+	// READ HEADER
+	fseek(f, 96, SEEK_SET);
+	fread(&las_first_point, sizeof(las_first_point), 1, f); // Read offset to first point
+
+	fseek(f, 5, SEEK_CUR);
+	fread(&las_skip_bytes, sizeof(las_skip_bytes), 1, f);
+	las_skip_bytes -= 12; // Subtract size of coordinates
+
+	fread(&las_legacy_total_points, sizeof(uint32_t), 1, f);
+	if (las_legacy_total_points == 0) {
+		fseek(f, 140, SEEK_SET); // Seek the new long long number of points
+		fread(&las_total_points, sizeof(uint64_t), 1, f);
+		fseek(f, 101, SEEK_SET); // Rewind back to the legacy number to continue
+	}
+	else {
+		las_total_points = las_legacy_total_points;
+	}
+
+	fseek(f, 131, SEEK_SET);
+	fread(&las_scale_x, sizeof(las_scale_x), 1, f);
+	fread(&las_scale_y, sizeof(las_scale_y), 1, f);
+	fread(&las_scale_z, sizeof(las_scale_z), 1, f);
+
+	fread(&las_offset_x, sizeof(las_offset_x), 1, f);
+	fread(&las_offset_y, sizeof(las_offset_y), 1, f);
+	fread(&las_offset_z, sizeof(las_offset_z), 1, f);
+
+	fseek(f, las_first_point, SEEK_SET); // Seek the first point to start reading
+	return f;
 }
 
 void BufferedPointReader::read() { // Only called by async thread
-	bool open_success = false;
+	FILE* bin_file = nullptr;
+	bool open_success;
 
 	switch (format) {
 	case POINT_FILE_FORMAT_RAW:
-		open_success = open_file_raw();
+		open_success = open_file_raw(bin_file);
+		break;
+	case POINT_FILE_FORMAT_LAS:
+		open_success = open_file_las(bin_file);
 		break;
 	}
 
@@ -59,7 +123,10 @@ void BufferedPointReader::read() { // Only called by async thread
 
 		switch (format) {
 		case POINT_FILE_FORMAT_RAW:
-			eof = !read_point_raw(p);
+			eof = !read_point_raw(bin_file, p);
+			break;
+		case POINT_FILE_FORMAT_LAS:
+			eof = !read_point_las(bin_file, p);
 			break;
 		}
 
@@ -74,6 +141,7 @@ void BufferedPointReader::read() { // Only called by async thread
 		}
 	}
 	if (i != 0) swap_buffers(i);
+	fclose(bin_file);
 }
 
 void BufferedPointReader::start() {
@@ -81,7 +149,7 @@ void BufferedPointReader::start() {
 		read();
 		while (points_available()); // Wait for all points to be read
 		_eof = true;
-		buffer_lock.lock(); // Wait for mutex to be unlocked to safely terminate the thread
+		buffer_lock.lock(); // Wait for mutex to be unlocked by the main thread to safely terminate this thread
 		buffer_lock.unlock();
 
 		delete[] buffer0;
@@ -106,5 +174,4 @@ BufferedPointReader::BufferedPointReader(std::string file, uint8_t format, uint6
 	_points_available = false;
 
 	points_in_buffer = 0;
-	bin_file = nullptr;
 }

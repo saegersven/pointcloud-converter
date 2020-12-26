@@ -26,7 +26,7 @@ void BufferedPointWriter::write() {
 			if(!f)
 				throw std::exception("Could not open file");
 
-			fwrite(&it->second[0], sizeof(struct Point), it->second.size(), f); // Write points
+			fwrite(&it->second[0], sizeof(struct Point), it->second.size(), f);
 
 			fclose(f);
 
@@ -55,6 +55,7 @@ void BufferedPointWriter::done() {
 }
 
 void BufferedPointWriter::schedule_points(std::string hierarchy, std::vector<Point>& points) {
+	if (points.size() == 0) return;
 	to_write_lock.lock();
 	if (to_write.find(hierarchy) != to_write.end()) {
 		// Append points

@@ -6,12 +6,14 @@
 #include "Builder.h"
 #include "utils.h"
 
+#define SKIP_READ
+
 #define ERR_CODE_INVALID_ARGS 1
 #define ERR_CODE_OUT_NOT_EMPTY 2
 #define ERR_CODE_BUILDER_THREAD 3
 #define ERR_CODE_HIERARCHY 4
 
-#define MAX_NODE_SIZE 4096
+#define MAX_NODE_SIZE 20'000
 #define SAMPLED_NODE_SIZE MAX_NODE_SIZE
 
 void fail(int code) {
@@ -77,18 +79,32 @@ int main(int argc, char** argv)
 	// Create output directory
 	std::filesystem::create_directories(argv[2]);
 	// Check if an existing output directory is empty
+#ifndef SKIP_READ
 	if (!is_directory_empty(argv[2])) {
 		std::cout << "Output directory must be empty." << std::endl;
 		fail(ERR_CODE_OUT_NOT_EMPTY);
 	}
+#endif
 
 	auto start = std::chrono::high_resolution_clock::now();
 
 	std::cout << "Reading... ";
 
 	Reader r(argv[1], argv[2]);
+
+#ifdef SKIP_READ
+	//Center(372.735, 36.274, 568.365)
+	//	Size    134.426
+	Cube bounding_cube;
+	bounding_cube.center_x = 372.735f;
+	bounding_cube.center_y = 36.274f;
+	bounding_cube.center_z = 568.365f;
+	bounding_cube.size = 134.426f;
+	std::cout << "Skipping read" << std::endl;
+#else
 	Cube bounding_cube = r.read_bounds();
-	
+#endif
+
 	std::cout << "Done." << std::endl << std::endl;
 
 	std::cout << "AABB:" << std::endl;
@@ -104,20 +120,27 @@ int main(int argc, char** argv)
 	std::vector<std::future<Node*>> future_trees(8);
 
 	uint8_t threads_finished = 0;
+	uint8_t no_point_threads = 0;
 
 	// Run 8 builders
 	for (int i = 0; i < 8; i++) {
 		if (splitPointsMetadata.num_points[i] == 0) {
 			// Mark this thread as finished from the beginning
 			threads_finished |= (1 << i);
+			no_point_threads |= (1 << i);
 			continue;
 		}
 		std::string hierarchy_prefix = std::to_string(i);
 		Builder b(splitPointsMetadata.bounding_cubes[i], splitPointsMetadata.num_points[i], argv[2],
 			hierarchy_prefix, MAX_NODE_SIZE, SAMPLED_NODE_SIZE);
 		// Start building
-		future_trees[i] = std::async(std::launch::async, [](Builder b) {
-			return b.build();
+		future_trees[i] = std::async(std::launch::async, [i](Builder b) {
+			try {
+				return b.build();
+			}
+			catch (std::exception e) {
+				std::cout << "Error in thread " << i << ":" << std::endl << e.what() << std::endl;
+			}
 		}, b);
 	}
 
@@ -141,9 +164,13 @@ int main(int argc, char** argv)
 	Node* root_node = new Node();
 	root_node->child_nodes = new Node*[8];
 	for (int i = 0; i < 8; i++) {
+		if (no_point_threads & (1 << i)) {
+			continue; // This thread was not executed at all
+		}
+
 		Node* child_node;
 		try {
-			child_node = future_trees[i].get();
+				child_node = future_trees[i].get();
 		}
 		catch (std::exception e) {
 			std::cout << std::endl << "Could not fetch results of thread " << i << std::endl;
