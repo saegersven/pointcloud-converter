@@ -1,5 +1,13 @@
+#include <mutex>
+#include <string>
+#include <iostream>
+#include <random>
+#include <future>
+#include "Utils.h"
+#include "Data.h"
 #include "Builder.h"
 #include "BufferedPointReader.h"
+#include "Logger.h"
 
 void Builder::load_points(Node* node) {
 	FILE* points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "rb");
@@ -71,35 +79,45 @@ void Builder::split_node_in_core(Node* node) {
 /// Recursively split nodes that have too many points to create an octree
 /// </summary>
 /// <param name="node">The root node of the tree</param>
-void Builder::split_node(Node* node) {
+void Builder::split_node(Node* node, bool is_async) {
 	if (node->num_points > max_node_size) {
-		if (node->num_points < 5'000'000) { // We can safely split this node in-core, since it is less than 60MB
-			load_points(node);
-			std::filesystem::remove(get_full_point_file(node->id, output_path, ""));
-			split_node_in_core(node);
+		if (node->num_points < 2'000'000) { // We can safely split this node in-core
+			std::async(std::launch::async, [this](Node* node) {
+				threads_finished_lock.lock();
+				int index = threads_finished.size();
+				threads_finished.push_back(false);
+				threads_finished_lock.unlock();
+
+				Logger::add_thread_alias(std::this_thread::get_id(), "SIC" + node->id);
+				load_points(node);
+				std::filesystem::remove(get_full_point_file(node->id, output_path, ""));
+				split_node_in_core(node);
+				Logger::log_info("Done splitting async");
+
+				threads_finished_lock.lock();
+				threads_finished[index] = true;
+				threads_finished_lock.unlock();
+			}, node);
 			return;
 		}
+		/*else if (node->num_points < 4'000'000 && !is_async) {
+			// Split this node asynchronously
+			threads.push_back(std::async([this, is_async](Node* node) {
+				Logger::add_thread_alias(std::this_thread::get_id(), "SUB" + node->id);
+				split_node(node, true);
+				Logger::log_info("Done splitting async");
+			}, node));
+			return;
+		}*/
 
 		uint64_t initial_file_size = std::filesystem::file_size(get_full_point_file(node->id, output_path, ""));
 		uint64_t total_child_file_size = 0;
 
 		FILE* points_file = nullptr;
-		std::unique_ptr<BufferedPointReader> reader = nullptr;
 
-		bool async_reading;
-		if (node->num_points > 500'000) {
-			// If the number of points is very big, use an async buffered reader
-			async_reading = true;
+		points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "rb");
 
-			reader = std::unique_ptr<BufferedPointReader>(new BufferedPointReader(get_full_point_file(node->id, output_path, "").c_str(), POINT_FILE_FORMAT_RAW, 50'000));
-			reader->start();
-		}
-		else {
-			async_reading = false;
-			points_file = fopen(get_full_point_file(node->id, output_path, "").c_str(), "rb");
-
-			if (!points_file) throw std::exception("Could not open file");
-		}
+		if (!points_file) throw std::exception("Could not open file");
 
 		FILE* child_point_files[8];
 		std::string child_node_paths[8];
@@ -114,35 +132,15 @@ void Builder::split_node(Node* node) {
 		uint64_t total_child_points = 0;
 		// Read through all points of this node and sort them into the child nodes
 		Point p;
-		if (async_reading) {
-			uint64_t num_points = 0;
-			Point* points;
-			while (num_points = reader->start_reading(points)) {
-				for (uint64_t i = 0; i < num_points; i++) {
-					uint8_t index = 0;
-					index |= ((points[i].x > node->bounds.center_x ? 1 : 0) << 2);
-					index |= ((points[i].y > node->bounds.center_y ? 1 : 0) << 1);
-					index |= ((points[i].z > node->bounds.center_z ? 1 : 0) << 0);
+		while (fread(&p, sizeof(p), 1, points_file)) {
+			uint8_t index = 0;
+			index |= ((p.x > node->bounds.center_x ? 1 : 0) << 2);
+			index |= ((p.y > node->bounds.center_y ? 1 : 0) << 1);
+			index |= ((p.z > node->bounds.center_z ? 1 : 0) << 0);
 
-					fwrite(&points[i], sizeof(p), 1, child_point_files[index]);
-					num_child_points[index]++;
-					total_child_points++;
-				}
-
-				reader->stop_reading();
-			}
-		}
-		else {
-			while (fread(&p, sizeof(p), 1, points_file)) {
-				uint8_t index = 0;
-				index |= ((p.x > node->bounds.center_x ? 1 : 0) << 2);
-				index |= ((p.y > node->bounds.center_y ? 1 : 0) << 1);
-				index |= ((p.z > node->bounds.center_z ? 1 : 0) << 0);
-
-				fwrite(&p, sizeof(p), 1, child_point_files[index]);
-				num_child_points[index]++;
-				total_child_points++;
-			}
+			fwrite(&p, sizeof(p), 1, child_point_files[index]);
+			num_child_points[index]++;
+			total_child_points++;
 		}
 
 		node->child_nodes = new Node * [8];
@@ -165,10 +163,10 @@ void Builder::split_node(Node* node) {
 				node->child_nodes[i] = child_node;
 
 				// Try splitting up the node
-				split_node(child_node);
+				split_node(child_node, false);
 			}
 		}
-		if(!async_reading) fclose(points_file);
+		fclose(points_file);
 
 		uint64_t lost_bytes = initial_file_size - total_child_file_size;
 		if (lost_bytes != 0) std::cout << "Lost " << lost_bytes << "b (splitting node " << node->id << ")" << std::endl;
@@ -176,6 +174,8 @@ void Builder::split_node(Node* node) {
 		// Delete the points file and set number of points for this node to 0
 		node->num_points = 0;
 		remove(get_full_point_file(node->id, output_path, "").c_str());
+	} else {
+		total_final_points += node->num_points;
 	}
 }
 
@@ -286,9 +286,35 @@ Node* Builder::build()
 	node->child_nodes_mask = 0;
 	node->num_points = num_points;
 
-	split_node(node);
+	try {
+		total_final_points = 0;
+		split_node(node, false);
 
-	sample_tree(node);
+		while (threads_finished.size() == 0);
+
+		bool all_finished = false;
+		while (!all_finished) {
+			all_finished = true;
+			threads_finished_lock.lock();
+			for (int i = 0; i < threads_finished.size(); i++) {
+				if (threads_finished[i] == false) {
+					all_finished = false;
+					break;
+				}
+			}
+			threads_finished_lock.unlock();
+		}
+
+		Logger::log_info("Split " + std::to_string(total_final_points) + "/" + std::to_string(num_points) + " points");
+
+		sample_tree(node);
+	}
+	catch (std::exception e) {
+		Logger::log_error("Error building:");
+		Logger::log_error(e.what());
+
+		return nullptr;
+	}
 
 	return node;
 }

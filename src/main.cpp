@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <future>
+#include "Logger.h"
 #include "Data.h"
 #include "Reader.h"
 #include "Builder.h"
@@ -71,8 +72,10 @@ void write_hierarchy(Node* root_node, std::string path) {
 
 int main(int argc, char** argv)
 {
+	Logger::add_thread_alias(std::this_thread::get_id(), "MAIN");
+
 	if (argc != 3 || !check_file(argv[1])) {
-		std::cout << "Invalid arguments" << std::endl;
+		Logger::log_error("Invalid arguments");
 		fail(ERR_CODE_INVALID_ARGS);
 	}
 
@@ -81,14 +84,14 @@ int main(int argc, char** argv)
 	// Check if an existing output directory is empty
 #ifndef SKIP_READ
 	if (!is_directory_empty(argv[2])) {
-		std::cout << "Output directory must be empty." << std::endl;
+		Logger::log_error("Invalid arguments");
 		fail(ERR_CODE_OUT_NOT_EMPTY);
 	}
 #endif
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	std::cout << "Reading... ";
+	Logger::log_info("Reading");
 
 	Reader r(argv[1], argv[2]);
 
@@ -100,22 +103,22 @@ int main(int argc, char** argv)
 	bounding_cube.center_y = 36.274f;
 	bounding_cube.center_z = 568.365f;
 	bounding_cube.size = 134.426f;
-	std::cout << "Skipping read" << std::endl;
+	Logger::log_info("Skipping read");
 #else
 	Cube bounding_cube = r.read_bounds();
 #endif
 
-	std::cout << "Done." << std::endl << std::endl;
+	Logger::log_info("Done Reading");
 
-	std::cout << "AABB:" << std::endl;
-	std::cout << "Center\t" << "(" << bounding_cube.center_x << ", " << bounding_cube.center_y << ", " << bounding_cube.center_z << ")" << std::endl;
-	std::cout << "Size\t" << bounding_cube.size << std::endl << std::endl;
+	Logger::log_info("Bounds: (" + std::to_string(bounding_cube.center_x) + ", " + std::to_string(bounding_cube.center_y) + ", "
+		+ std::to_string(bounding_cube.center_z) + "), " + std::to_string(bounding_cube.size));
 
-	std::cout << "Distributing... ";
+	Logger::log_info("Distributing");
 	// Split points into eight smaller sets of points
 	SplitPointsMetadata splitPointsMetadata = r.split_points(bounding_cube);
 
-	std::cout << "Done." << std::endl << std::endl << "Building octree..." << std::endl;
+	Logger::log_info("Done Distributing");
+	Logger::log_info("Building Octree");
 
 	std::vector<std::future<Node*>> future_trees(8);
 
@@ -133,15 +136,22 @@ int main(int argc, char** argv)
 		std::string hierarchy_prefix = std::to_string(i);
 		Builder b(splitPointsMetadata.bounding_cubes[i], splitPointsMetadata.num_points[i], argv[2],
 			hierarchy_prefix, MAX_NODE_SIZE, SAMPLED_NODE_SIZE);
-		// Start building
-		future_trees[i] = std::async(std::launch::async, [i](Builder b) {
+
+		auto l = [i](Builder* builder) {
 			try {
-				return b.build();
+				Logger::add_thread_alias(std::this_thread::get_id(), "BLD" + std::to_string(i));
+				Node* node = builder->build();
+				Logger::log_info("Finished building");
+				return node;
 			}
 			catch (std::exception e) {
-				std::cout << "Error in thread " << i << ":" << std::endl << e.what() << std::endl;
+				Logger::log_error(e.what());
+				fail(ERR_CODE_BUILDER_THREAD);
+				return (Node*)nullptr;
 			}
-		}, b);
+		};
+		// Start building
+		future_trees[i] = std::async(std::launch::async, l, &b);
 	}
 
 	std::chrono::milliseconds wait_span(100);
@@ -150,16 +160,12 @@ int main(int argc, char** argv)
 			if (splitPointsMetadata.num_points[i] == 0 || threads_finished & (1 << i)) continue;
 
 			if (future_trees[i].wait_for(wait_span) == std::future_status::ready) {
-				std::cout << "Thread " << i << " finished." << std::endl;
-				std::cout << "Took "
-					<< std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count()
-					<< "ms" << std::endl << std::endl;
 				threads_finished |= (1 << i);
 			}
 		}
 	}
 
-	std::cout << "Merging trees... ";
+	Logger::log_info("Merging trees");
 
 	Node* root_node = new Node();
 	root_node->child_nodes = new Node*[8];
@@ -173,7 +179,7 @@ int main(int argc, char** argv)
 				child_node = future_trees[i].get();
 		}
 		catch (std::exception e) {
-			std::cout << std::endl << "Could not fetch results of thread " << i << std::endl;
+			Logger::log_error("Could not fetch results of thread " + std::to_string(i));
 			delete root_node;
 			fail(ERR_CODE_BUILDER_THREAD);
 			return 0;
@@ -186,17 +192,15 @@ int main(int argc, char** argv)
 	root_node->id = "";
 	Builder::sample(root_node, SAMPLED_NODE_SIZE, argv[2]);
 
-	std::cout << "Done" << std::endl;
+	Logger::log_info("Done merging");
 
-	std::cout << "Writing hierarchy... ";
+	Logger::log_info("Writing hierarchy");
 	
 	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
 
-	std::cout << "Done." << std::endl << std::endl;
-
-	std::cout << "Total time: "
-		<< std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count()
-		<< "ms" << std::endl;
+	Logger::log_info("Done. Total time: "
+		+ std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count())
+		+ "ms");
 
 	delete root_node;
 
