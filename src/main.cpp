@@ -77,23 +77,6 @@ int main(int argc, char* argv[]) {
 	uint64_t sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
 	Logger::log_info("Building took " + std::to_string(sub_time) + "ms");
 
-	// SAMPLING IS INCLUDED IN BUILDING STEP
-	/*Logger::log_info("Sampling");
-	sub_start_time = std::chrono::high_resolution_clock::now();
-
-	try {
-		sample_node(root_node, 15'000, argv[2]);
-	}
-	catch (std::exception e) {
-		Logger::log_error("Error sampling:");
-		Logger::log_error(e.what());
-		fail(ErrCode::SAMPLE_FAIL);
-		return 0;
-	}
-
-	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
-	Logger::log_info("Sampling took " + std::to_string(sub_time) + "ms");*/
-
 	delete root_node;
 
 	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
