@@ -11,6 +11,8 @@ public:
 	static void log_warning(const std::string& message);
 	static void log_error(const std::string& message);
 
+	static void log_return(const std::string& message);
+
 	static void add_thread_alias(const std::string& alias);
 	static void add_thread_alias(std::thread::id id, const std::string& alias);
 
@@ -22,4 +24,5 @@ private:
 	std::mutex lock;
 
 	void log(const std::string& mode, const std::string& message);
+	void log(const std::string& mode, const std::string& message, const char line_ending);
 };

@@ -38,6 +38,7 @@ Cube Reader::read_bounds() {
 	std::vector<Point> point_buffer;
 	point_buffer.resize(buf_size);
 
+	const int status_interval = 1'000'000;
 	uint64_t i = 0;
 	while (num_points = reader.start_reading(points)) { // reader.start_reading will return 0 if all points have been read
 		for (uint64_t y = 0; y < num_points; y++) {
@@ -59,10 +60,12 @@ Cube Reader::read_bounds() {
 		writer.schedule_points("", point_buffer);
 
 		reader.stop_reading();
+		if(i % status_interval == 0) Logger::log_info(std::to_string(i) + " points");
 	}
 	point_buffer.resize(i % buf_size);
 	writer.schedule_points("", point_buffer); // Schedule the rest of the points
 	writer.done();
+	Logger::log_info(std::to_string(i) + " total points read");
 
 	while (!writer.finished()); // Wait until the writer has finished cleaning up before it gets destroyed
 

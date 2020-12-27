@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
 	// Number of points can be retrieved from the file size of the root node points file (12 bytes per point)
 	uint64_t num_points = std::filesystem::file_size(get_full_point_file("", argv[2])) / 12;
-	Builder b(bounding_cube, num_points, argv[2], 15'000);
+	Builder b(bounding_cube, num_points, argv[2], 30'000, 30'000);
 
 	Logger::log_info("Building octree");
 	auto sub_start_time = std::chrono::high_resolution_clock::now();
@@ -77,7 +77,8 @@ int main(int argc, char* argv[]) {
 	uint64_t sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
 	Logger::log_info("Building took " + std::to_string(sub_time) + "ms");
 
-	Logger::log_info("Sampling");
+	// SAMPLING IS INCLUDED IN BUILDING STEP
+	/*Logger::log_info("Sampling");
 	sub_start_time = std::chrono::high_resolution_clock::now();
 
 	try {
@@ -91,7 +92,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
-	Logger::log_info("Sampling took " + std::to_string(sub_time) + "ms");
+	Logger::log_info("Sampling took " + std::to_string(sub_time) + "ms");*/
 
 	delete root_node;
 

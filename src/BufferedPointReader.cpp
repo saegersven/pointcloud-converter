@@ -163,15 +163,27 @@ BufferedPointReader::BufferedPointReader(std::string file, uint8_t format, uint6
 	this->format = format;
 	this->buffer_size = buffer_size;
 
+	points_in_buffer = 0;
+	las_total_points = 0;
+	las_legacy_total_points = 0;
+	las_num_points = 0;
+	las_skip_bytes = 0;
+	las_first_point = 0;
+
+	las_scale_x = 0.0;
+	las_scale_y = 0.0;
+	las_scale_z = 0.0;
+	las_offset_x = 0.0;
+	las_offset_y = 0.0;
+	las_offset_z = 0.0;
+
+	public_buffer = &buffer0;
+	private_buffer = &buffer1;
+	_public_buffer = false;
+
 	buffer0 = new Point[buffer_size];
 	buffer1 = new Point[buffer_size];
 
-	_public_buffer = false;
-	public_buffer = &buffer0;
-	private_buffer = &buffer1;
-
-	_eof = false;
 	_points_available = false;
-
-	points_in_buffer = 0;
+	_eof = false;
 }

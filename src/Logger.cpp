@@ -19,7 +19,15 @@ void Logger::log_error(const std::string& message) {
 	instance()->log("ERROR", message);
 }
 
+void Logger::log_return(const std::string& message) {
+	instance()->log("ERROR", message, '\r');
+}
+
 void Logger::log(const std::string& mode, const std::string& message) {
+	log(mode, message, '\n');
+}
+
+void Logger::log(const std::string& mode, const std::string& message, const char line_ending) {
 	std::string m = "";
 
 	std::thread::id this_id = std::this_thread::get_id();
@@ -31,7 +39,7 @@ void Logger::log(const std::string& mode, const std::string& message) {
 	m.append(message);
 
 	lock.lock();
-	std::cout << m << std::endl;
+	std::cout << m << line_ending;
 	lock.unlock();
 }
 

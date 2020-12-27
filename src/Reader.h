@@ -8,6 +8,7 @@
 #include "Data.h"
 #include "BufferedPointReader.h"
 #include "BufferedPointWriter.h"
+#include "Logger.h"
 
 class Reader
 {

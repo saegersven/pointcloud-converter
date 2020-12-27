@@ -58,3 +58,7 @@ std::string get_full_point_file(const std::string& hierarchy, const std::string&
 {
 	return output_path + "/p" + hierarchy + ".bin";
 }
+
+std::string get_full_temp_point_file(const std::string& hierarchy, const std::string& output_path) {
+	return output_path + "/temp" + hierarchy + ".bin";
+}
