@@ -20,8 +20,7 @@ bool is_directory_empty(const std::string& path) {
 /// <param name="filename">The path to the file.</param>
 /// <returns>true if the file can be opened, false otherwise.</returns>
 bool check_file(const std::string& filename) {
-	FILE* file;
-	if (fopen_s(&file, filename.c_str(), "r") == NULL && file) {
+	if (FILE* file = fopen(filename.c_str(), "rb")) {
 		fclose(file);
 		return true;
 	}
@@ -55,7 +54,7 @@ std::string get_directory(std::string file) {
 /// <param name="output_path">The output folder.</param>
 /// <param name="hierarchy_prefix">A prefix to be added in front of the hierarchy.</param>
 /// <returns>The path to the point file.</returns>
-std::string get_full_point_file(std::string hierarchy, std::string output_path, std::string hierarchy_prefix)
+std::string get_full_point_file(const std::string& hierarchy, const std::string& output_path)
 {
-	return output_path + "/p" + hierarchy_prefix + hierarchy + ".bin";
+	return output_path + "/p" + hierarchy + ".bin";
 }

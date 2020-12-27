@@ -1,3 +1,4 @@
+#pragma once
 #include <iostream>
 #include <map>
 #include <thread>
@@ -6,11 +7,12 @@
 
 class Logger {
 public:
-	static void log_info(std::string message);
-	static void log_warning(std::string message);
-	static void log_error(std::string message);
+	static void log_info(const std::string& message);
+	static void log_warning(const std::string& message);
+	static void log_error(const std::string& message);
 
-	static void add_thread_alias(std::thread::id id, std::string alias);
+	static void add_thread_alias(const std::string& alias);
+	static void add_thread_alias(std::thread::id id, const std::string& alias);
 
 private:
 	static std::shared_ptr<Logger> _instance;
@@ -19,5 +21,5 @@ private:
 	std::map<std::thread::id, std::string> thread_aliases;
 	std::mutex lock;
 
-	void log(std::string mode, std::string message);
+	void log(const std::string& mode, const std::string& message);
 };

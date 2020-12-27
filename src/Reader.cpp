@@ -15,7 +15,7 @@ Cube Reader::read_bounds() {
 	Bounds bounds;
 
 	// To make reading faster for the next step, copy the contents of this file into a binary file
-	temp_point_path = get_full_point_file("", output_path, "");
+	temp_point_path = get_full_point_file("", output_path);
 
 	/*FILE* point_file;
 	fopen_s(&point_file, temp_point_path.c_str(), "wb");
@@ -120,7 +120,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		splitPointsMetadata.num_points[index]++;
 	}*/
 
-	BufferedPointReader reader(get_full_point_file("", output_path, ""), POINT_FILE_FORMAT_RAW, 200'000);
+	BufferedPointReader reader(get_full_point_file("", output_path), POINT_FILE_FORMAT_RAW, 200'000);
 	reader.start();
 
 	BufferedPointWriter writer(output_path, 20'000);
@@ -157,7 +157,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 	//fclose(point_file);
 
 	try {
-		std::filesystem::remove(get_full_point_file("", output_path, ""));
+		std::filesystem::remove(get_full_point_file("", output_path));
 	}
 	catch (std::filesystem::filesystem_error e) {
 		std::cout << "Error while deleting file: " << std::endl << e.what() << std::endl;

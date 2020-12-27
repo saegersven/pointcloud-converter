@@ -8,4 +8,4 @@ bool check_file(const std::string& filename);
 
 std::string get_directory(std::string file);
 
-std::string get_full_point_file(std::string hierarchy, std::string output_path, std::string hierarchy_prefix);
+std::string get_full_point_file(const std::string& hierarchy, const std::string& output_path);

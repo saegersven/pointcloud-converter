@@ -22,7 +22,7 @@ void BufferedPointWriter::write() {
 		std::map<std::string, std::vector<Point>>::iterator it = to_write.begin();
 
 		while (it != to_write.end()) {
-			FILE* f = fopen(get_full_point_file(it->first, output_path, "").c_str(), "ab");
+			FILE* f = fopen(get_full_point_file(it->first, output_path).c_str(), "ab");
 			if(!f)
 				throw std::exception("Could not open file");
 

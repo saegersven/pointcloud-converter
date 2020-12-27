@@ -1,28 +1,29 @@
 #pragma once
-class Builder
-{
+#include <future>
+#include "Data.h"
+#include "Utils.h"
+#include "Logger.h"
+
+class Builder {
 private:
-	std::string output_path;
-	std::string hierarchy_prefix;
-	uint32_t max_node_size;
-	uint32_t sampled_node_size;
+	std::vector<std::future<void>> futures;
+
 	Cube bounding_cube;
 	uint64_t num_points;
-	uint64_t total_final_points;
+	std::string output_path;
+	uint32_t max_node_size;
+	uint32_t sampled_node_size;
 
-	std::mutex threads_finished_lock;
-	std::vector<bool> threads_finished;
+	uint8_t find_child_node_index(Cube& bounds, Point& p);
+	Node* create_child_node(std::string id, uint64_t num_points, std::vector<Point> points,
+		float center_x, float center_y, float center_z, float size);
 
-	void split_node(Node* node, bool async);
-	void sample_tree(Node* node);
+	void ic_load_points(Node* node);
+	void ic_split_node(Node* node);
 
-	void split_node_in_core(Node* node);
-	void load_points(Node* node);
+	void split_node(Node* node);
+
 public:
-	// Sample the children of this node into the node
-	static uint64_t sample(Node* node, uint32_t num_points, std::string output_path);
-
-	Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
-		std::string hierarchy_prefix, uint32_t max_node_size, uint32_t sampled_node_size);
 	Node* build();
+	Builder(Cube bounding_cube, uint64_t num_points, std::string output_path, uint32_t max_node_size);
 };

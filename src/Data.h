@@ -25,6 +25,10 @@ struct Cube {
 	float center_x, center_y, center_z;
 	// Size is half the length of one edge
 	float size;
+	
+	std::string to_string() {
+		return "(" + std::to_string(center_x) + ", " + std::to_string(center_y) + ", " + std::to_string(center_z) + "), " + std::to_string(size);
+	}
 };
 
 struct Node {
@@ -34,6 +38,7 @@ struct Node {
 	std::vector<Point> points; // Only used when splitting points in-core
 	// Bit mask, the rightmost bit is the first node, the leftmost corresponds to the eighth child node
 	uint8_t child_nodes_mask;
+	uint8_t num_child_nodes;
 	// Indices of the nodes:
 	// (7) 00000111: right, top, back
 	// (5) 00000101: right, bottom, back

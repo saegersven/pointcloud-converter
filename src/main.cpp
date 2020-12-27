@@ -1,208 +1,102 @@
-#include <iostream>
-#include <chrono>
-#include <future>
+#include <string>
+#include <filesystem>
 #include "Logger.h"
-#include "Data.h"
 #include "Reader.h"
 #include "Builder.h"
-#include "utils.h"
+#include "Sampler.h"
+#include "Utils.h"
 
 #define SKIP_READ
+#define SKIP_BOUNDS { 372.735f, 36.274f, 568.365f, 134.426f }
 
-#define ERR_CODE_INVALID_ARGS 1
-#define ERR_CODE_OUT_NOT_EMPTY 2
-#define ERR_CODE_BUILDER_THREAD 3
-#define ERR_CODE_HIERARCHY 4
+enum class ErrCode {
+	INVALID_ARGS = 1,
+	OUT_NOT_EMPTY = 2,
+	BUILD_FAIL = 3,
+	SAMPLE_FAIL = 4,
+};
 
-#define MAX_NODE_SIZE 20'000
-#define SAMPLED_NODE_SIZE MAX_NODE_SIZE
-
-void fail(int code) {
-	std::cout << std::endl << "Conversion failed with code " << code << std::endl;
-	std::cout << "Press any key to exit...";
-	std::cin.get();
-	exit(code);
+void fail(ErrCode code) {
+	Logger::log_error("Conversion failed (error code " + std::to_string((int)code) + ")");
+	exit((int)code);
 }
 
-void write_node_to_hierarchy(Node* node, FILE* file, bool write_bounds) {
-	// FORMAT:
-	// for root node:
-	// center x: float
-	// center y: float
-	// center z: float
-	// size: float
-	// for all nodes:
-	// number of points: 64 bit unsigned int
-	// child node mask: 8 bit bitmask
-	// + Child nodes recursively
-
-	// id will be calculated at runtime
-	// Bounds will be calculated at runtime for every node except the root node
-	if (write_bounds) {
-		fwrite(&node->bounds.center_x, sizeof(float), 1, file);
-		fwrite(&node->bounds.center_y, sizeof(float), 1, file);
-		fwrite(&node->bounds.center_z, sizeof(float), 1, file);
-		fwrite(&node->bounds.size, sizeof(float), 1, file);
-	}
-	// Write number of points (64 bit int)
-	fwrite(&node->num_points, sizeof(uint64_t), 1, file);
-	// Write child mask (8 bit)
-	fwrite(&node->child_nodes_mask, sizeof(uint8_t), 1, file);
-
-	// Now write all the child nodes from first to last, if they exist
-	for (int i = 0; i < 8; i++) {
-		if (node->child_nodes_mask & (1 << i)) {
-			write_node_to_hierarchy(node->child_nodes[i], file, false);
-		}
-	}
-}
-
-void write_hierarchy(Node* root_node, std::string path) {
-	FILE* hierarchy_file = fopen(path.c_str(), "wb");
-
-	if (!hierarchy_file) {
-		fail(ERR_CODE_HIERARCHY);
-		return;
-	}
-
-	write_node_to_hierarchy(root_node, hierarchy_file, true);
-
-	fclose(hierarchy_file);
-}
-
-int main(int argc, char** argv)
-{
-	Logger::add_thread_alias(std::this_thread::get_id(), "MAIN");
+int main(int argc, char* argv[]) {
+	Logger::add_thread_alias("MAIN");
 
 	if (argc != 3 || !check_file(argv[1])) {
 		Logger::log_error("Invalid arguments");
-		fail(ERR_CODE_INVALID_ARGS);
+		fail(ErrCode::INVALID_ARGS);
 	}
 
-	// Create output directory
 	std::filesystem::create_directories(argv[2]);
-	// Check if an existing output directory is empty
+
 #ifndef SKIP_READ
 	if (!is_directory_empty(argv[2])) {
-		Logger::log_error("Invalid arguments");
-		fail(ERR_CODE_OUT_NOT_EMPTY);
+		Logger::log_error("Output directory must be empty");
+		fail(ErrCode::OUT_NOT_EMPTY);
 	}
 #endif
 
-	auto start = std::chrono::high_resolution_clock::now();
+	auto start_time = std::chrono::high_resolution_clock::now();
 
-	Logger::log_info("Reading");
+	Logger::log_info("Reading points");
 
 	Reader r(argv[1], argv[2]);
 
 #ifdef SKIP_READ
-	//Center(372.735, 36.274, 568.365)
-	//	Size    134.426
-	Cube bounding_cube;
-	bounding_cube.center_x = 372.735f;
-	bounding_cube.center_y = 36.274f;
-	bounding_cube.center_z = 568.365f;
-	bounding_cube.size = 134.426f;
+	Cube bounding_cube = SKIP_BOUNDS;
 	Logger::log_info("Skipping read");
 #else
 	Cube bounding_cube = r.read_bounds();
 #endif
 
-	Logger::log_info("Done Reading");
+	Logger::log_info("Done reading");
 
-	Logger::log_info("Bounds: (" + std::to_string(bounding_cube.center_x) + ", " + std::to_string(bounding_cube.center_y) + ", "
-		+ std::to_string(bounding_cube.center_z) + "), " + std::to_string(bounding_cube.size));
+	Logger::log_info("Bounds: " + bounding_cube.to_string());
 
-	Logger::log_info("Distributing");
-	// Split points into eight smaller sets of points
-	SplitPointsMetadata splitPointsMetadata = r.split_points(bounding_cube);
+	// Number of points can be retrieved from the file size of the root node points file (12 bytes per point)
+	uint64_t num_points = std::filesystem::file_size(get_full_point_file("", argv[2])) / 12;
+	Builder b(bounding_cube, num_points, argv[2], 50'000);
 
-	Logger::log_info("Done Distributing");
-	Logger::log_info("Building Octree");
+	Logger::log_info("Building octree");
+	auto sub_start_time = std::chrono::high_resolution_clock::now();
 
-	std::vector<std::future<Node*>> future_trees(8);
-
-	uint8_t threads_finished = 0;
-	uint8_t no_point_threads = 0;
-
-	// Run 8 builders
-	for (int i = 0; i < 8; i++) {
-		if (splitPointsMetadata.num_points[i] == 0) {
-			// Mark this thread as finished from the beginning
-			threads_finished |= (1 << i);
-			no_point_threads |= (1 << i);
-			continue;
-		}
-		std::string hierarchy_prefix = std::to_string(i);
-		Builder b(splitPointsMetadata.bounding_cubes[i], splitPointsMetadata.num_points[i], argv[2],
-			hierarchy_prefix, MAX_NODE_SIZE, SAMPLED_NODE_SIZE);
-
-		auto l = [i](Builder* builder) {
-			try {
-				Logger::add_thread_alias(std::this_thread::get_id(), "BLD" + std::to_string(i));
-				Node* node = builder->build();
-				Logger::log_info("Finished building");
-				return node;
-			}
-			catch (std::exception e) {
-				Logger::log_error(e.what());
-				fail(ERR_CODE_BUILDER_THREAD);
-				return (Node*)nullptr;
-			}
-		};
-		// Start building
-		future_trees[i] = std::async(std::launch::async, l, &b);
+	Node* root_node;
+	try {
+		root_node = b.build();
+	}
+	catch (std::exception e) {
+		Logger::log_error("Error building:");
+		Logger::log_error(e.what());
+		std::cin.get();
+		fail(ErrCode::BUILD_FAIL);
+		return 0;
 	}
 
-	std::chrono::milliseconds wait_span(100);
-	while (threads_finished != 0xFF) {
-		for (int i = 0; i < 8; i++) {
-			if (splitPointsMetadata.num_points[i] == 0 || threads_finished & (1 << i)) continue;
+	uint64_t sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
+	Logger::log_info("Building took " + std::to_string(sub_time) + "ms");
 
-			if (future_trees[i].wait_for(wait_span) == std::future_status::ready) {
-				threads_finished |= (1 << i);
-			}
-		}
+	Logger::log_info("Sampling");
+	sub_start_time = std::chrono::high_resolution_clock::now();
+
+	try {
+		sample_node(root_node, 50'000, argv[2]);
+	}
+	catch (std::exception e) {
+		Logger::log_error("Error sampling:");
+		Logger::log_error(e.what());
+		fail(ErrCode::SAMPLE_FAIL);
+		return 0;
 	}
 
-	Logger::log_info("Merging trees");
-
-	Node* root_node = new Node();
-	root_node->child_nodes = new Node*[8];
-	for (int i = 0; i < 8; i++) {
-		if (no_point_threads & (1 << i)) {
-			continue; // This thread was not executed at all
-		}
-
-		Node* child_node;
-		try {
-				child_node = future_trees[i].get();
-		}
-		catch (std::exception e) {
-			Logger::log_error("Could not fetch results of thread " + std::to_string(i));
-			delete root_node;
-			fail(ERR_CODE_BUILDER_THREAD);
-			return 0;
-		}
-
-		root_node->child_nodes_mask |= ((splitPointsMetadata.num_points[i] == 0 ? 0 : 1) << i);
-		root_node->child_nodes[i] = child_node;
-	}
-	root_node->bounds = bounding_cube;
-	root_node->id = "";
-	Builder::sample(root_node, SAMPLED_NODE_SIZE, argv[2]);
-
-	Logger::log_info("Done merging");
-
-	Logger::log_info("Writing hierarchy");
-	
-	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
-
-	Logger::log_info("Done. Total time: "
-		+ std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count())
-		+ "ms");
+	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
+	Logger::log_info("Sampling took " + std::to_string(sub_time) + "ms");
 
 	delete root_node;
+
+	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
+	Logger::log_info("Total time: " + std::to_string(sub_time) + "ms");
 
 	std::cin.get();
 }
