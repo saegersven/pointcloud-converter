@@ -82,23 +82,32 @@ void Builder::ic_split_node(Node* node) {
 		std::vector<Point>().swap(node->points); // Clear points and free memory
 
 		fclose(points_file);
+		points_processed += node->num_points;
 	}
 }
 
-void Builder::split_node(Node* node) {
+void Builder::split_node(Node* node, bool is_async) {
 	if (node->num_points > max_node_size) {
 		if (node->num_points < 2'000'000) {
-			// Split this node in-core
-			ic_load_points(node);
+			if (num_points_in_core < 38'000'000) { // Ensure that only 40 million points are in memory at the same time
+				uint64_t num_points_to_load = node->num_points;
 
-			std::filesystem::remove(get_full_point_file(node->id, output_path));
-			ic_split_node(node);
-			return;
+				num_points_in_core += num_points_to_load;
+				// Split this node in-core
+				ic_load_points(node);
+
+				std::filesystem::remove(get_full_point_file(node->id, output_path));
+
+				ic_split_node(node);
+				num_points_in_core -= num_points_to_load;
+				return;
+			}
 		}
-		else if (node->num_points > 10'000'000) {
+		else if (node->num_points > 5'000'000 && !is_async) {
 			// Run async
 			futures.push_back(std::async(std::launch::async, [this, node] {
-				split_node(node);
+				Logger::add_thread_alias("BLDA");
+				split_node(node, true);
 			}));
 			return;
 		}
@@ -122,7 +131,6 @@ void Builder::split_node(Node* node) {
 		fclose(points_file);
 
 		std::filesystem::remove(get_full_point_file(node->id, output_path));
-		Logger::log_info("Removed " + node->id);
 		node->num_points = 0;
 
 		node->child_nodes = new Node*[8];
@@ -140,9 +148,12 @@ void Builder::split_node(Node* node) {
 				node->child_nodes_mask |= (1 << i);
 				node->child_nodes[i] = child_node;
 
-				split_node(child_node);
+				split_node(child_node, false);
 			}
 		}
+	}
+	else {
+		points_processed += node->num_points;
 	}
 }
 
@@ -153,17 +164,34 @@ Node* Builder::build() {
 	root_node->child_nodes_mask = 0;
 	root_node->num_points = num_points;
 
-	split_node(root_node);
+	std::thread status_thread([this, root_node] {
+		Logger::add_thread_alias("BUILD");
+		std::chrono::milliseconds wait_for(3000);
+		uint64_t total_points = root_node->num_points;
+		while (points_processed < total_points) {
+			std::this_thread::sleep_for(wait_for);
+			uint64_t points = points_processed.load();
+			Logger::log_info(std::to_string(std::llround((double)points / (double)total_points * 100.0)) + "% ("
+				+ std::to_string(points) + "/" + std::to_string(total_points) + ")\r");
+		}
+	});
+	status_thread.detach();
 
-	std::chrono::milliseconds wait_span(100);
+	split_node(root_node, true /*Don't make the root node async*/);
+
+	std::chrono::milliseconds wait_span(500);
 	while (futures.size() > 0) {
 		for (int i = 0; i < futures.size(); i++) {
-			if (futures[i].wait_for(wait_span) == std::future_status::ready) {
-				futures.erase(futures.begin() + i);
-				i--;
+			if (futures[i].wait_for(wait_span) != std::future_status::ready) {
+				continue;
 			}
+			futures[i].get();
+			futures.erase(futures.begin() + i);
+			i--;
 		}
 	}
+
+	status_thread.join();
 
 	return root_node;
 }
@@ -174,4 +202,6 @@ Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_pat
 	this->num_points = num_points;
 	this->output_path = output_path;
 	this->max_node_size = max_node_size;
+	this->num_points_in_core = 0;
+	this->points_processed = 0;
 }

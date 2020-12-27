@@ -6,7 +6,7 @@
 #include "Sampler.h"
 #include "Utils.h"
 
-#define SKIP_READ
+//#define SKIP_READ
 #define SKIP_BOUNDS { 372.735f, 36.274f, 568.365f, 134.426f }
 
 enum class ErrCode {
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
 	// Number of points can be retrieved from the file size of the root node points file (12 bytes per point)
 	uint64_t num_points = std::filesystem::file_size(get_full_point_file("", argv[2])) / 12;
-	Builder b(bounding_cube, num_points, argv[2], 50'000);
+	Builder b(bounding_cube, num_points, argv[2], 15'000);
 
 	Logger::log_info("Building octree");
 	auto sub_start_time = std::chrono::high_resolution_clock::now();
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
 	sub_start_time = std::chrono::high_resolution_clock::now();
 
 	try {
-		sample_node(root_node, 50'000, argv[2]);
+		sample_node(root_node, 15'000, argv[2]);
 	}
 	catch (std::exception e) {
 		Logger::log_error("Error sampling:");

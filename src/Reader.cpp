@@ -25,10 +25,9 @@ Cube Reader::read_bounds() {
 
 	BufferedPointWriter writer(output_path, 1024);
 
-	const uint64_t WRITE_THRESHOLD = 1024;
-	std::vector<Point> point_buffer(WRITE_THRESHOLD);
 
-	BufferedPointReader reader(input_path, POINT_FILE_FORMAT_LAS, 200'000);
+	const uint64_t buf_size = 200'000;
+	BufferedPointReader reader(input_path, POINT_FILE_FORMAT_LAS, buf_size);
 	reader.start();
 
 	writer.start_writing();
@@ -36,12 +35,12 @@ Cube Reader::read_bounds() {
 	Point* points;
 	uint64_t num_points = 0;
 
+	std::vector<Point> point_buffer;
+	point_buffer.resize(buf_size);
+
 	uint64_t i = 0;
 	while (num_points = reader.start_reading(points)) { // reader.start_reading will return 0 if all points have been read
 		for (uint64_t y = 0; y < num_points; y++) {
-			if (i != 0 && i % WRITE_THRESHOLD == 0) {
-				writer.schedule_points("", point_buffer);
-			}
 
 			if (points[y].x < bounds.min_x) bounds.min_x = points[y].x;
 			if (points[y].x > bounds.max_x) bounds.max_x = points[y].x;
@@ -53,14 +52,15 @@ Cube Reader::read_bounds() {
 			if (points[y].z > bounds.max_z) bounds.max_z = points[y].z;
 
 			//fwrite(&p, sizeof(p), 1, point_file);
-			point_buffer[i % WRITE_THRESHOLD] = points[y];
-
+			point_buffer[y] = points[y];
 			i++;
 		}
 
+		writer.schedule_points("", point_buffer);
+
 		reader.stop_reading();
 	}
-	point_buffer.resize(i % WRITE_THRESHOLD);
+	point_buffer.resize(i % buf_size);
 	writer.schedule_points("", point_buffer); // Schedule the rest of the points
 	writer.done();
 
