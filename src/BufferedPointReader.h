@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <mutex>
+#include <thread>
 #include "Data.h"
 
 class BufferedPointReader {
