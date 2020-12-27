@@ -26,17 +26,17 @@ Cube Reader::read_bounds() {
 	BufferedPointWriter writer(output_path, 1024);
 
 
-	const uint64_t buf_size = 200'000;
+	const uint64_t buf_size = 100'000;
 	BufferedPointReader reader(input_path, POINT_FILE_FORMAT_LAS, buf_size);
 	reader.start();
 
 	writer.start_writing();
 
-	Point* points;
-	uint64_t num_points = 0;
-
 	std::vector<Point> point_buffer;
 	point_buffer.resize(buf_size);
+
+	Point* points;
+	uint64_t num_points = 1;
 
 	const int status_interval = 1'000'000;
 	uint64_t i = 0;
@@ -60,7 +60,7 @@ Cube Reader::read_bounds() {
 		writer.schedule_points("", point_buffer);
 
 		reader.stop_reading();
-		if(i % status_interval == 0) Logger::log_info(std::to_string(i) + " points");
+		if(i % status_interval == 0) Logger::log_return(std::to_string(i) + " points");
 	}
 	point_buffer.resize(i % buf_size);
 	writer.schedule_points("", point_buffer); // Schedule the rest of the points

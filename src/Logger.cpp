@@ -20,7 +20,17 @@ void Logger::log_error(const std::string& message) {
 }
 
 void Logger::log_return(const std::string& message) {
-	instance()->log("ERROR", message, '\r');
+	instance()->log("INFO", message, '\r');
+}
+
+void Logger::log_raw(const std::string& message) {
+	instance()->log_raw_i(message);
+}
+
+void Logger::log_raw_i(const std::string& message) {
+	lock.lock();
+	std::cout << message;
+	lock.unlock();
 }
 
 void Logger::log(const std::string& mode, const std::string& message) {

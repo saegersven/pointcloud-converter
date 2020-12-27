@@ -16,6 +16,8 @@ public:
 	static void add_thread_alias(const std::string& alias);
 	static void add_thread_alias(std::thread::id id, const std::string& alias);
 
+	static void log_raw(const std::string& message);
+	
 private:
 	static std::shared_ptr<Logger> _instance;
 	static std::shared_ptr<Logger> instance();
@@ -25,4 +27,6 @@ private:
 
 	void log(const std::string& mode, const std::string& message);
 	void log(const std::string& mode, const std::string& message, const char line_ending);
+
+	void log_raw_i(const std::string& message);
 };

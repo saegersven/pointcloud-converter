@@ -4,6 +4,7 @@
 #include "Reader.h"
 #include "Builder.h"
 #include "Utils.h"
+#include "HierarchyWriter.h"
 
 //#define SKIP_READ
 #define SKIP_BOUNDS { 372.735f, 36.274f, 568.365f, 134.426f }
@@ -75,6 +76,9 @@ int main(int argc, char* argv[]) {
 
 	uint64_t sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
 	Logger::log_info("Building took " + std::to_string(sub_time) + "ms");
+
+	Logger::log_info("Writing hierarchy");
+	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
 
 	delete root_node;
 

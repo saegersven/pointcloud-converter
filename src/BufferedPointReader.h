@@ -31,8 +31,8 @@ private:
 	Point* buffer0;
 	Point* buffer1;
 
-	bool _points_available;
-	bool _eof;
+	std::atomic<bool> _points_available;
+	std::atomic<bool> _eof;
 
 	bool read_point_raw(FILE* file, Point& p);
 	bool open_file_raw(FILE*& f);

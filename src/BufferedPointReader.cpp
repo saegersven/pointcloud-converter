@@ -1,4 +1,5 @@
 #include "BufferedPointReader.h"
+#include <iostream>
 
 uint64_t BufferedPointReader::start_reading(Point*& buffer) { // Only called by main thread
 	if (!points_available() && eof()) return 0;
@@ -15,11 +16,11 @@ void BufferedPointReader::stop_reading() { // Only called by main thread
 }
 
 bool BufferedPointReader::points_available() {
-	return _points_available;
+	return _points_available.load();
 }
 
 bool BufferedPointReader::eof() {
-	return _eof;
+	return _eof.load();
 }
 
 void BufferedPointReader::swap_buffers(uint64_t num_points) { // Only called by async thread
