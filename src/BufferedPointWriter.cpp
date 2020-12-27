@@ -24,7 +24,7 @@ void BufferedPointWriter::write() {
 		while (it != to_write.end()) {
 			FILE* f = fopen(get_full_point_file(it->first, output_path).c_str(), "ab");
 			if(!f)
-				throw std::exception("Could not open file");
+				throw std::runtime_error("Could not open file");
 
 			fwrite(&it->second[0], sizeof(struct Point), it->second.size(), f);
 

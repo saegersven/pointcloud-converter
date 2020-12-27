@@ -2,7 +2,7 @@
 
 void Builder::ic_load_points(Node* node) {
 	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
-	if (!points_file) throw std::exception("Could not open file");
+	if (!points_file) throw std::runtime_error("Could not open file");
 
 	node->points.resize(node->num_points);
 
@@ -37,7 +37,7 @@ Node* Builder::create_child_node(std::string id, uint64_t num_points, std::vecto
 
 void Builder::ic_sample_node(Node* node) {
 	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
-	if (!points_file) throw std::exception("Could not open file");
+	if (!points_file) throw std::runtime_error("Could not open file");
 
 	uint64_t sample_interval = node->num_points / sampled_node_size;
 	for (uint64_t i = 0; i < sampled_node_size; i++) {
@@ -84,9 +84,9 @@ void Builder::ic_split_node(Node* node) {
 		}
 	}
 	else {
-		if (!node->points.size()) throw std::exception("No points loaded");
+		if (!node->points.size()) throw std::runtime_error("No points loaded");
 		FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
-		if (!points_file) throw std::exception("Could not open file");
+		if (!points_file) throw std::runtime_error("Could not open file");
 
 		for (uint64_t i = 0; i < node->num_points; i++) {
 			fwrite(&node->points[i], sizeof(struct Point), 1, points_file);
@@ -126,11 +126,11 @@ void Builder::split_node(Node* node, bool is_async) {
 
 
 		FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
-		if (!points_file) throw std::exception("Could not open file");
+		if (!points_file) throw std::runtime_error("Could not open file");
 
 		// Since we will split this node, we can sample it now
 		FILE* sample_file = fopen(get_full_temp_point_file(node->id, output_path).c_str(), "wb");
-		if (!sample_file) throw std::exception("Could not open file");
+		if (!sample_file) throw std::runtime_error("Could not open file");
 
 		FILE* child_point_files[8] = { nullptr };
 		uint64_t num_child_points[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -145,7 +145,7 @@ void Builder::split_node(Node* node, bool is_async) {
 			uint8_t index = find_child_node_index(node->bounds, p);
 			if (!child_point_files[index]) {
 				child_point_files[index] = fopen(get_full_point_file(node->id + std::to_string(index), output_path).c_str(), "wb");
-				if (!child_point_files[index]) throw std::exception("Could not open file");
+				if (!child_point_files[index]) throw std::runtime_error("Could not open file");
 			}
 			fwrite(&p, sizeof(struct Point), 1, child_point_files[index]);
 			num_child_points[index]++;

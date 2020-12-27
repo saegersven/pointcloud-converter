@@ -45,6 +45,7 @@ std::string get_directory(std::string file) {
 			return file.substr(0, last_slash_index);
 		}
 	}
+	return file;
 }
 
 /// <summary>

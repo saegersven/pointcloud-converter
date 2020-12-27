@@ -114,7 +114,7 @@ void BufferedPointReader::read() { // Only called by async thread
 		break;
 	}
 
-	if (!open_success) throw std::exception("Could not open file");
+	if (!open_success) throw std::runtime_error("Could not open file");
 
 	uint64_t i = 0;
 	bool eof = false;

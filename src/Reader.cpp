@@ -163,8 +163,7 @@ SplitPointsMetadata Reader::split_points(Cube bounding_cube) {
 		std::filesystem::remove(get_full_point_file("", output_path));
 	}
 	catch (std::filesystem::filesystem_error e) {
-		std::cout << "Error while deleting file: " << std::endl << e.what() << std::endl;
-		throw std::exception("Error");
+		throw std::runtime_error("Error deleting file");
 	}
 
 	return splitPointsMetadata;
