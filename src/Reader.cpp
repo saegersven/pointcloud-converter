@@ -1,6 +1,6 @@
 #include "Reader.h"
 
-Reader::Reader(std::string input_path, std::string output_path)
+Reader::Reader(std::vector<std::string> input_path, std::string output_path)
 {
 	this->input_path = input_path;
 	this->output_path = output_path;
@@ -25,45 +25,56 @@ Cube Reader::read_bounds() {
 
 	BufferedPointWriter writer(output_path, 1024);
 
-
 	const uint64_t buf_size = 100'000;
-	BufferedPointReader reader(input_path, POINT_FILE_FORMAT_LAS, buf_size);
-	reader.start();
-
-	writer.start_writing();
-
-	std::vector<Point> point_buffer;
-	point_buffer.resize(buf_size);
-
-	Point* points;
-	uint64_t num_points = 1;
-
-	const int status_interval = 1'000'000;
 	uint64_t i = 0;
-	while (num_points = reader.start_reading(points)) { // reader.start_reading will return 0 if all points have been read
-		for (uint64_t y = 0; y < num_points; y++) {
+	for (std::string input : input_path) {
 
-			if (points[y].x < bounds.min_x) bounds.min_x = points[y].x;
-			if (points[y].x > bounds.max_x) bounds.max_x = points[y].x;
+		BufferedPointReader reader(input, POINT_FILE_FORMAT_LAS, buf_size);
+		reader.start();
 
-			if (points[y].y < bounds.min_y) bounds.min_y = points[y].y;
-			if (points[y].y > bounds.max_y) bounds.max_y = points[y].y;
+		writer.start_writing();
 
-			if (points[y].z < bounds.min_z) bounds.min_z = points[y].z;
-			if (points[y].z > bounds.max_z) bounds.max_z = points[y].z;
+		std::vector<Point> point_buffer;
+		point_buffer.resize(buf_size);
 
-			//fwrite(&p, sizeof(p), 1, point_file);
-			point_buffer[y] = points[y];
-			i++;
+		Point* points;
+		uint64_t num_points = 1;
+
+		const int status_interval = 1'000'000;
+		while (true) { // reader.start_reading will return 0 if all points have been read
+			num_points = reader.start_reading(points);
+			if (num_points == 0) {
+				writer.schedule_points("", point_buffer);
+				reader.stop_reading();
+				break;
+			}
+
+			if (num_points != point_buffer.size()) {
+				point_buffer.resize(num_points);
+			}
+
+			for (uint64_t y = 0; y < num_points; y++) {
+
+				if (points[y].x < bounds.min_x) bounds.min_x = points[y].x;
+				if (points[y].x > bounds.max_x) bounds.max_x = points[y].x;
+
+				if (points[y].y < bounds.min_y) bounds.min_y = points[y].y;
+				if (points[y].y > bounds.max_y) bounds.max_y = points[y].y;
+
+				if (points[y].z < bounds.min_z) bounds.min_z = points[y].z;
+				if (points[y].z > bounds.max_z) bounds.max_z = points[y].z;
+
+				//fwrite(&p, sizeof(p), 1, point_file);
+				point_buffer[y] = points[y];
+				i++;
+				if (i % status_interval == 0) Logger::log_return(std::to_string(i) + " points");
+			}
+
+			writer.schedule_points("", point_buffer);
+
+			reader.stop_reading();
 		}
-
-		writer.schedule_points("", point_buffer);
-
-		reader.stop_reading();
-		if(i % status_interval == 0) Logger::log_return(std::to_string(i) + " points");
 	}
-	point_buffer.resize(i % buf_size);
-	writer.schedule_points("", point_buffer); // Schedule the rest of the points
 	writer.done();
 	Logger::log_info(std::to_string(i) + " total points read");
 
@@ -79,6 +90,56 @@ Cube Reader::read_bounds() {
 		std::max(bounds.max_y - bounds.min_y, bounds.max_z - bounds.min_z)) / 2.0f;
 
 	return c;
+}
+
+void Reader::read_bounds_las(std::vector<std::string> input_files, Cube& bounds, uint64_t& num_points) {
+	double max_x = std::numeric_limits<double>::lowest();
+	double min_x = std::numeric_limits<double>::max();
+	double max_y = std::numeric_limits<double>::lowest();
+	double min_y = std::numeric_limits<double>::max();
+	double max_z = std::numeric_limits<double>::lowest();
+	double min_z = std::numeric_limits<double>::max();
+
+	for (int i = 0; i < input_files.size(); i++) {
+		// Read las header
+		FILE* file = fopen(input_files[i].c_str(), "rb");
+		if (!file) throw std::runtime_error("Could not open file");
+
+		uint64_t num_points_file = 0;
+		uint32_t num_points_file_legacy = 0;
+		fseek(file, 107, SEEK_SET);
+		fread(&num_points_file_legacy, sizeof(uint32_t), 1, file);
+		if (num_points_file_legacy == 0) {
+			fseek(file, 140, SEEK_SET);
+			fread(&num_points_file, sizeof(uint64_t), 1, file);
+			fseek(file, 107 + sizeof(uint32_t), SEEK_SET);
+			num_points += num_points_file;
+		}
+		else {
+			num_points += num_points_file_legacy;
+		}
+
+		double bounds_dummy;
+		fseek(file, 179, SEEK_SET);
+		fread(&bounds_dummy, sizeof(double), 1, file); // Max X
+		if (bounds_dummy > max_x) max_x = bounds_dummy;
+		fread(&bounds_dummy, sizeof(double), 1, file); // Min X
+		if (bounds_dummy < min_x) min_x = bounds_dummy;
+
+		fread(&bounds_dummy, sizeof(double), 1, file); // Max Y
+		if (bounds_dummy > max_y) max_y = bounds_dummy;
+		fread(&bounds_dummy, sizeof(double), 1, file); // Min Y
+		if (bounds_dummy < min_y) min_y = bounds_dummy;
+
+		fread(&bounds_dummy, sizeof(double), 1, file); // Max Z
+		if (bounds_dummy > max_z) max_z = bounds_dummy;
+		fread(&bounds_dummy, sizeof(double), 1, file); // Min Z
+		if (bounds_dummy < min_z) min_z = bounds_dummy;
+	}
+	bounds.center_x = (float)((min_x + max_x) / 2.0);
+	bounds.center_y = (float)((min_y + max_y) / 2.0);
+	bounds.center_z = (float)((min_z + max_z) / 2.0);
+	bounds.size = (float)(0.01 + std::max(max_x - min_x, std::max(max_y - min_y, max_z - min_z)) / 2.0);
 }
 
 /// <summary>

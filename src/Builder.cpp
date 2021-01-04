@@ -35,16 +35,19 @@ Node* Builder::create_child_node(std::string id, uint64_t num_points, std::vecto
 	return node;
 }
 
-void Builder::ic_sample_node(Node* node) {
-	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
+uint64_t Builder::ic_sample_node(Node* node) {
+	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
 	if (!points_file) throw std::runtime_error("Could not open file");
 
-	uint64_t sample_interval = node->num_points / sampled_node_size;
+	uint64_t to_sample = (std::min(sampled_node_size, (uint32_t)node->points.size()));
+	uint64_t sample_interval = node->num_points / to_sample;
 	for (uint64_t i = 0; i < sampled_node_size; i++) {
 		fwrite(&node->points[i * sample_interval], sizeof(struct Point), 1, points_file);
 	}
 
 	fclose(points_file);
+
+	return to_sample;
 }
 
 void Builder::ic_split_node(Node* node) {
@@ -74,8 +77,8 @@ void Builder::ic_split_node(Node* node) {
 			}
 		}
 
-		std::vector<Point>().swap(node->points); // Clear points from memory before attempting to split child nodes
-		node->num_points = 0;
+		node->num_points = ic_sample_node(node);
+		std::vector<Point>().swap(node->points); // Clear points from memory
 
 		for (int i = 0; i < 8; i++) {
 			if (node->child_nodes_mask & (1 << i)) {
@@ -99,6 +102,10 @@ void Builder::ic_split_node(Node* node) {
 }
 
 void Builder::split_node(Node* node, bool is_async) {
+	split_node(node, is_async, false, std::vector<std::string>());
+}
+
+void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> input_files) {
 	if (node->num_points > max_node_size) {
 		if (node->num_points < 2'000'000) {
 			if (num_points_in_core < 38'000'000) { // Ensure that only 40 million points are in memory at the same time
@@ -125,8 +132,11 @@ void Builder::split_node(Node* node, bool is_async) {
 		}
 
 
-		FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
-		if (!points_file) throw std::runtime_error("Could not open file");
+		/*FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
+		if (!points_file) throw std::runtime_error("Could not open file");*/
+		if (!is_las) {
+			input_files.push_back(get_full_point_file(node->id, output_path));
+		}
 
 		// Since we will split this node, we can sample it now
 		FILE* sample_file = fopen(get_full_temp_point_file(node->id, output_path).c_str(), "wb");
@@ -136,29 +146,43 @@ void Builder::split_node(Node* node, bool is_async) {
 		uint64_t num_child_points[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 		uint64_t i = 0;
+		uint64_t sampled_points = 0;
 		uint64_t sample_interval = (int)((double)node->num_points / (double)sampled_node_size);
 
-		Point p;
-		while (fread(&p, sizeof(struct Point), 1, points_file)) {
-			if (i % sample_interval == 0) fwrite(&p, sizeof(struct Point), 1, sample_file);
+		for (std::string file : input_files) {
+			if(input_files.size() > 1) Logger::log_info("Reading file '" + std::filesystem::path(file).filename().string() + "'");
+			BufferedPointReader reader(file, is_las ? POINT_FILE_FORMAT_LAS : POINT_FILE_FORMAT_RAW, 1'000'000);
+			reader.start();
 
-			uint8_t index = find_child_node_index(node->bounds, p);
-			if (!child_point_files[index]) {
-				child_point_files[index] = fopen(get_full_point_file(node->id + std::to_string(index), output_path).c_str(), "wb");
-				if (!child_point_files[index]) throw std::runtime_error("Could not open file");
+			uint64_t num_points;
+			Point* points;
+			while (num_points = reader.start_reading(points)) {
+				for (int y = 0; y < num_points; y++) {
+					if (i % sample_interval == 0) {
+						fwrite(&points[y], sizeof(struct Point), 1, sample_file);
+						sampled_points++;
+					}
+
+					uint8_t index = find_child_node_index(node->bounds, points[y]);
+					if (!child_point_files[index]) {
+						child_point_files[index] = fopen(get_full_point_file(node->id + std::to_string(index), output_path).c_str(), "wb");
+						if (!child_point_files[index]) throw std::runtime_error("Could not open file");
+					}
+					fwrite(&points[y], sizeof(struct Point), 1, child_point_files[index]);
+					num_child_points[index]++;
+					i++;
+				}
+				reader.stop_reading();
 			}
-			fwrite(&p, sizeof(struct Point), 1, child_point_files[index]);
-			num_child_points[index]++;
-			i++;
+			while (!reader.done());
 		}
-		fclose(points_file);
 		fclose(sample_file);
 
-		std::filesystem::remove(get_full_point_file(node->id, output_path));
-		node->num_points = 0;
-
+		// If this file exists (if we have not read from an las file), remove it so it can be replaced with the sampled points file
+		if(!is_las) std::filesystem::remove(get_full_point_file(node->id, output_path));
 		// Replace the file that contains all points with the temp file that contains the sampled subset
 		std::filesystem::rename(get_full_temp_point_file(node->id, output_path), get_full_point_file(node->id, output_path));
+		node->num_points = sampled_points;
 
 		node->child_nodes = new Node*[8];
 		for (int i = 0; i < 8; i++) {
@@ -204,7 +228,8 @@ Node* Builder::build() {
 	});
 	status_thread.detach();
 
-	split_node(root_node, true /*Don't make the root node async*/);
+	split_node(root_node, true /*Don't make the root node async*/,
+		true /*The root node is directly split from the input las files*/, las_input_paths);
 
 	std::chrono::milliseconds wait_span(500);
 	while (futures.size() > 0) {
@@ -223,7 +248,7 @@ Node* Builder::build() {
 }
 
 Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
-	uint32_t max_node_size, uint32_t sampled_node_size) : futures(0) {
+	uint32_t max_node_size, uint32_t sampled_node_size, std::vector<std::string> las_input_paths) : futures(0) {
 	this->bounding_cube = bounding_cube;
 	this->num_points = num_points;
 	this->output_path = output_path;
@@ -231,4 +256,5 @@ Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_pat
 	this->sampled_node_size = sampled_node_size;
 	this->num_points_in_core = 0;
 	this->points_processed = 0;
+	this->las_input_paths = las_input_paths;
 }

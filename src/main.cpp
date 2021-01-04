@@ -24,40 +24,54 @@ void fail(ErrCode code) {
 int main(int argc, char* argv[]) {
 	Logger::add_thread_alias("MAIN");
 
-	if (argc != 3 || !check_file(argv[1])) {
+	if (argc != 3) {
 		Logger::log_error("Invalid arguments");
 		fail(ErrCode::INVALID_ARGS);
 	}
 
+	bool is_dir = std::filesystem::is_directory(argv[1]);
+	std::vector<std::string> input_files;
+	if (is_dir) {
+		const std::string ext = ".las";
+		// Iterate through all files in directory
+		for (auto& p : std::filesystem::recursive_directory_iterator(argv[1])) {
+			if (p.path().extension() == ext) input_files.push_back(p.path().string());
+		}
+		if (input_files.size() == 0) {
+			Logger::log_error("No input files in directory");
+			fail(ErrCode::INVALID_ARGS);
+		}
+	}
+	else {
+		if (!check_file(argv[1])) {
+			Logger::log_error("Could not open input file");
+			fail(ErrCode::INVALID_ARGS);
+		}
+		input_files.push_back(argv[1]);
+	}
+
 	std::filesystem::create_directories(argv[2]);
 
-#ifndef SKIP_READ
 	if (!is_directory_empty(argv[2])) {
 		Logger::log_error("Output directory must be empty");
 		fail(ErrCode::OUT_NOT_EMPTY);
 	}
-#endif
 
 	auto start_time = std::chrono::high_resolution_clock::now();
 
 	Logger::log_info("Reading points");
 
-	Reader r(argv[1], argv[2]);
+	//Reader r(input_files, argv[2]);
 
-#ifdef SKIP_READ
-	Cube bounding_cube = SKIP_BOUNDS;
-	Logger::log_info("Skipping read");
-#else
-	Cube bounding_cube = r.read_bounds();
-#endif
+	Cube bounding_cube;
+	uint64_t num_points = 0;
+	Reader::read_bounds_las(input_files, bounding_cube, num_points);
 
 	Logger::log_info("Done reading");
 
 	Logger::log_info("Bounds: " + bounding_cube.to_string());
 
-	// Number of points can be retrieved from the file size of the root node points file (12 bytes per point)
-	uint64_t num_points = std::filesystem::file_size(get_full_point_file("", argv[2])) / 12;
-	Builder b(bounding_cube, num_points, argv[2], 30'000, 30'000);
+	Builder b(bounding_cube, num_points, argv[2], 30'000, 30'000, input_files);
 
 	Logger::log_info("Building octree");
 	auto sub_start_time = std::chrono::high_resolution_clock::now();

@@ -33,6 +33,7 @@ private:
 
 	std::atomic<bool> _points_available;
 	std::atomic<bool> _eof;
+	std::atomic<bool> _done;
 
 	bool read_point_raw(FILE* file, Point& p);
 	bool open_file_raw(FILE*& f);
@@ -52,4 +53,6 @@ public:
 
 	bool points_available();
 	bool eof();
+
+	bool done();
 };

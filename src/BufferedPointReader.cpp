@@ -23,6 +23,10 @@ bool BufferedPointReader::eof() {
 	return _eof.load();
 }
 
+bool BufferedPointReader::done() {
+	return _done.load();
+}
+
 void BufferedPointReader::swap_buffers(uint64_t num_points) { // Only called by async thread
 	buffer_lock.lock();
 	// Swap buffers
@@ -45,7 +49,7 @@ bool BufferedPointReader::open_file_raw(FILE*& f) {
 
 // LAS POINT FILE
 bool BufferedPointReader::read_point_las(FILE* f, Point& p) {
-	if (las_num_points == las_total_points) return false;
+	if (las_num_points >= las_total_points) return false;
 
 	int32_t x, y, z;
 	bool c = fread(&x, sizeof(int32_t), 1, f);
@@ -53,11 +57,11 @@ bool BufferedPointReader::read_point_las(FILE* f, Point& p) {
 	bool e = fread(&z, sizeof(int32_t), 1, f);
 	fseek(f, las_skip_bytes, SEEK_CUR);
 
-	/*// No offset, because the coordinates will become very big with some point clouds
+	// No offset, because the coordinates will become very big with some point clouds
 	p.x = x * las_scale_x + las_offset_x;
 	p.y = y * las_scale_y + las_offset_y;
 	p.z = z * las_scale_z + las_offset_z;
-	*/
+	
 	p.x = x * las_scale_x;
 	p.y = y * las_scale_y;
 	p.z = z * las_scale_z;
@@ -104,7 +108,7 @@ bool BufferedPointReader::open_file_las(FILE*& f) {
 
 void BufferedPointReader::read() { // Only called by async thread
 	FILE* bin_file = nullptr;
-	bool open_success;
+	bool open_success = false;
 
 	switch (format) {
 	case POINT_FILE_FORMAT_RAW:
@@ -118,20 +122,20 @@ void BufferedPointReader::read() { // Only called by async thread
 	if (!open_success) throw std::runtime_error("Could not open file");
 
 	uint64_t i = 0;
-	bool eof = false;
-	while (!eof) {
+	_eof.store(false);
+	while (!_eof.load()) {
 		Point p;
 
 		switch (format) {
 		case POINT_FILE_FORMAT_RAW:
-			eof = !read_point_raw(bin_file, p);
+			_eof.store(!read_point_raw(bin_file, p));
 			break;
 		case POINT_FILE_FORMAT_LAS:
-			eof = !read_point_las(bin_file, p);
+			_eof.store(!read_point_las(bin_file, p));
 			break;
 		}
 
-		if (eof) break;
+		if (_eof.load()) break;
 
 		(*private_buffer)[i] = p;
 		i++;
@@ -155,6 +159,7 @@ void BufferedPointReader::start() {
 
 		delete[] buffer0;
 		delete[] buffer1;
+		_done.store(true);
 	});
 	read_thread.detach();
 }
@@ -187,4 +192,5 @@ BufferedPointReader::BufferedPointReader(std::string file, uint8_t format, uint6
 
 	_points_available = false;
 	_eof = false;
+	_done = false;
 }

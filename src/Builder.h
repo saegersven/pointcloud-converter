@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include "Data.h"
 #include "Logger.h"
+#include "BufferedPointReader.h"
 
 class Builder {
 private:
@@ -11,6 +12,7 @@ private:
 
 	Cube bounding_cube;
 	uint64_t num_points;
+	std::vector<std::string> las_input_paths;
 	std::string output_path;
 	uint32_t max_node_size;
 	uint32_t sampled_node_size;
@@ -22,14 +24,15 @@ private:
 	Node* create_child_node(std::string id, uint64_t num_points, std::vector<Point> points,
 		float center_x, float center_y, float center_z, float size);
 
-	void ic_sample_node(Node* node);
+	uint64_t ic_sample_node(Node* node);
 	void ic_load_points(Node* node);
 	void ic_split_node(Node* node);
 
 	void split_node(Node* node, bool is_async);
+	void split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> las_input_files);
 
 public:
 	Node* build();
 	Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
-		uint32_t max_node_size, uint32_t sampled_node_size);
+		uint32_t max_node_size, uint32_t sampled_node_size, std::vector<std::string> las_input_paths);
 };
