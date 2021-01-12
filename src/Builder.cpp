@@ -36,16 +36,26 @@ Node* Builder::create_child_node(std::string id, uint64_t num_points, std::vecto
 }
 
 uint64_t Builder::ic_sample_node(Node* node) {
-	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
-	if (!points_file) throw std::runtime_error("Could not open file");
+	/*FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
+	if (!points_file) throw std::runtime_error("Could not open file");*/
 
 	uint64_t to_sample = (std::min(sampled_node_size, (uint32_t)node->points.size()));
-	uint64_t sample_interval = node->num_points / to_sample;
-	for (uint64_t i = 0; i < sampled_node_size; i++) {
-		fwrite(&node->points[i * sample_interval], sizeof(struct Point), 1, points_file);
+	uint64_t sample_interval = node->points.size() / to_sample;
+
+	std::vector<Point> sampled_points;
+	sampled_points.resize(to_sample);
+
+	for (uint64_t i = 0; i < to_sample; i++) {
+		//fwrite(&node->points[i * sample_interval], sizeof(struct Point), 1, points_file);
+		//sampled_points[i] = node->points[i * sample_interval];
+		sampled_points[i] = node->points[i];
 	}
 
-	fclose(points_file);
+	//fclose(points_file);
+	node->points.swap(sampled_points);
+	node->num_points = node->points.size();
+
+	write_node(node, true);
 
 	return to_sample;
 }
@@ -88,7 +98,7 @@ void Builder::ic_split_node(Node* node) {
 	}
 	else {
 		if (!node->points.size()) throw std::runtime_error("No points loaded");
-		FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
+		/*FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
 		if (!points_file) throw std::runtime_error("Could not open file");
 
 		for (uint64_t i = 0; i < node->num_points; i++) {
@@ -96,9 +106,39 @@ void Builder::ic_split_node(Node* node) {
 		}
 		std::vector<Point>().swap(node->points); // Clear points and free memory
 
-		fclose(points_file);
+		fclose(points_file);*/
+		write_node(node, true);
 		points_processed += node->num_points;
 	}
+}
+
+void Builder::write_node(Node* node, bool in_core) {
+	writer.add(node, in_core);
+	/*if (!octree_file) {
+		octree_file = fopen(get_octree_file(output_path).c_str(), "ab");
+		if (!octree_file) throw std::runtime_error("Could not open file");
+	}
+	octree_file_lock.lock();
+	node->byte_index = octree_file_cursor * sizeof(struct Point);
+
+	if (in_core) {
+		fwrite(&node->points[0], sizeof(struct Point), node->points.size(), octree_file);
+		std::vector<Point>().swap(node->points);
+	}
+	else {
+		std::string points_file_path = get_full_point_file(node->id, output_path);
+		FILE* node_points_file = fopen(points_file_path.c_str(), "rb");
+		Point p;
+		for (uint64_t i = 0; i < node->num_points; i++) {
+			fread(&p, sizeof(struct Point), 1, node_points_file);
+			fwrite(&p, sizeof(struct Point), 1, octree_file);
+		}
+		fclose(node_points_file);
+		std::filesystem::remove(points_file_path);
+	}
+
+	octree_file_cursor += node->num_points;
+	octree_file_lock.unlock();*/
 }
 
 void Builder::split_node(Node* node, bool is_async) {
@@ -185,6 +225,8 @@ void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std
 		std::filesystem::rename(get_full_temp_point_file(node->id, output_path), get_full_point_file(node->id, output_path));
 		node->num_points = sampled_points;
 
+		write_node(node, false);
+
 		node->child_nodes = new Node*[8];
 		for (int i = 0; i < 8; i++) {
 			if (child_point_files[i]) {
@@ -203,8 +245,8 @@ void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std
 				split_node(child_node, false);
 			}
 		}
-	}
-	else {
+	} else {
+		write_node(node, false);
 		points_processed += node->num_points;
 	}
 }
@@ -230,6 +272,8 @@ Node* Builder::build() {
 	});
 	status_thread.detach();
 
+	writer.start(output_path);
+
 	split_node(root_node, true /*Don't make the root node async*/,
 		true /*The root node is directly split from the input las files*/, las_input_paths);
 
@@ -244,8 +288,10 @@ Node* Builder::build() {
 			i--;
 		}
 	}
+	writer.done();
+
 	status_terminated = true;
-	Logger::log_info("Done building                   ");
+	Logger::log_info("Done building                       ");
 
 	return root_node;
 }
@@ -260,4 +306,6 @@ Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_pat
 	this->num_points_in_core = 0;
 	this->points_processed = 0;
 	this->las_input_paths = las_input_paths;
+	octree_file = 0;
+	octree_file_cursor = 0;
 }

@@ -37,6 +37,7 @@ struct Node {
 	uint64_t num_points;
 	std::vector<Point> points; // Only used when splitting points in-core
 	// Bit mask, the rightmost bit is the first node, the leftmost corresponds to the eighth child node
+	uint64_t byte_index;
 	uint8_t child_nodes_mask;
 	uint8_t num_child_nodes;
 	// Indices of the nodes:
@@ -46,6 +47,10 @@ struct Node {
 	// (0) 00000000: left, bottom, front
 	// when looking along the z axis
 	Node** child_nodes;
+
+	void free_points() {
+		std::vector<Point>().swap(points);
+	}
 };
 
 struct SplitPointsMetadata {

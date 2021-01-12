@@ -8,6 +8,7 @@
 #include "LasPointReader.h"
 #include "RawPointReader.h"
 #include "PointReader.h"
+#include "AsyncOctreeWriter.h"
 
 class Builder {
 private:
@@ -23,6 +24,12 @@ private:
 	std::atomic<uint64_t> points_processed;
 	std::atomic<uint64_t> num_points_in_core;
 
+	AsyncOctreeWriter writer;
+
+	std::mutex octree_file_lock;
+	uint64_t octree_file_cursor;
+	FILE* octree_file;
+
 	uint8_t find_child_node_index(Cube& bounds, Point& p);
 	Node* create_child_node(std::string id, uint64_t num_points, std::vector<Point> points,
 		float center_x, float center_y, float center_z, float size);
@@ -34,6 +41,8 @@ private:
 	void split_node(Node* node, bool is_async);
 	void split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> las_input_files);
 
+	void write_node(Node* node, bool in_core);
+	
 public:
 	Node* build();
 	Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
