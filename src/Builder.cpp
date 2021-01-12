@@ -216,11 +216,12 @@ Node* Builder::build() {
 	root_node->child_nodes_mask = 0;
 	root_node->num_points = num_points;
 
-	std::thread status_thread([this, root_node] {
+	bool status_terminated = false;
+	std::thread status_thread([this, root_node, status_terminated] {
 		Logger::add_thread_alias("BUILD");
 		std::chrono::milliseconds wait_for(3000);
 		uint64_t total_points = root_node->num_points;
-		while (points_processed < total_points) {
+		while (points_processed < total_points && !status_terminated) {
 			uint64_t points = points_processed.load();
 			Logger::log_return(std::to_string((int)((double)points / (double)total_points * 100.0)) + "% ("
 				+ std::to_string(points) + "/" + std::to_string(total_points) + ")\r");
@@ -243,6 +244,7 @@ Node* Builder::build() {
 			i--;
 		}
 	}
+	status_terminated = true;
 	Logger::log_info("Done building                   ");
 
 	return root_node;

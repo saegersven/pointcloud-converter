@@ -95,5 +95,7 @@ int main(int argc, char* argv[]) {
 	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
 	Logger::log_info("Total time: " + std::to_string(sub_time) + "ms");
 
+	Logger::log_info("Average throughput: " + std::to_string((int)(num_points / (sub_time / 1000.0))) + "P/s");
+
 	std::cin.get();
 }
