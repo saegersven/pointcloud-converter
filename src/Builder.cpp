@@ -108,7 +108,7 @@ void Builder::split_node(Node* node, bool is_async) {
 void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> input_files) {
 	if (node->num_points > max_node_size) {
 		if (node->num_points < 2'000'000) {
-			if (num_points_in_core < 38'000'000) { // Ensure that only 40 million points are in memory at the same time
+			if (num_points_in_core < 38'000'000) { // Ensure that only ~40M points are in memory at the same time
 				uint64_t num_points_to_load = node->num_points;
 
 				num_points_in_core += num_points_to_load;
@@ -150,31 +150,32 @@ void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std
 		uint64_t sample_interval = (int)((double)node->num_points / (double)sampled_node_size);
 
 		for (std::string file : input_files) {
-			if(input_files.size() > 1) Logger::log_info("Reading file '" + std::filesystem::path(file).filename().string() + "'");
-			BufferedPointReader reader(file, is_las ? POINT_FILE_FORMAT_LAS : POINT_FILE_FORMAT_RAW, 1'000'000);
-			reader.start();
-
-			uint64_t num_points;
-			Point* points;
-			while (num_points = reader.start_reading(points)) {
-				for (int y = 0; y < num_points; y++) {
-					if (i % sample_interval == 0) {
-						fwrite(&points[y], sizeof(struct Point), 1, sample_file);
-						sampled_points++;
-					}
-
-					uint8_t index = find_child_node_index(node->bounds, points[y]);
-					if (!child_point_files[index]) {
-						child_point_files[index] = fopen(get_full_point_file(node->id + std::to_string(index), output_path).c_str(), "wb");
-						if (!child_point_files[index]) throw std::runtime_error("Could not open file");
-					}
-					fwrite(&points[y], sizeof(struct Point), 1, child_point_files[index]);
-					num_child_points[index]++;
-					i++;
-				}
-				reader.stop_reading();
+			if (input_files.size() > 1) Logger::log_info("Reading file '" + std::filesystem::path(file).filename().string() + "'");
+			//BufferedPointReader reader(file, is_las ? POINT_FILE_FORMAT_LAS : POINT_FILE_FORMAT_RAW, 1'000'000);
+			std::unique_ptr<PointReader> r;
+			if (is_las) {
+				r = std::unique_ptr<LasPointReader>(new LasPointReader);
 			}
-			while (!reader.done());
+			else {
+				r = std::unique_ptr<RawPointReader>(new RawPointReader);
+			}
+			r->open(file);
+
+			for (Point p = r->read_point(); r->has_points(); p = r->read_point()) {
+				if (i % sample_interval == 0) {
+					fwrite(&p, sizeof(struct Point), 1, sample_file);
+					sampled_points++;
+				}
+
+				uint8_t index = find_child_node_index(node->bounds, p);
+				if (!child_point_files[index]) {
+					child_point_files[index] = fopen(get_full_point_file(node->id + std::to_string(index), output_path).c_str(), "wb");
+					if (!child_point_files[index]) throw std::runtime_error("Could not open file");
+				}
+				fwrite(&p, sizeof(struct Point), 1, child_point_files[index]);
+				num_child_points[index]++;
+				i++;
+			}
 		}
 		fclose(sample_file);
 

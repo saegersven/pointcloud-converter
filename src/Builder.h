@@ -5,6 +5,9 @@
 #include "Data.h"
 #include "Logger.h"
 #include "BufferedPointReader.h"
+#include "LasPointReader.h"
+#include "RawPointReader.h"
+#include "PointReader.h"
 
 class Builder {
 private:

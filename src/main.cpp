@@ -59,21 +59,17 @@ int main(int argc, char* argv[]) {
 
 	auto start_time = std::chrono::high_resolution_clock::now();
 
-	Logger::log_info("Reading points");
-
 	//Reader r(input_files, argv[2]);
 
 	Cube bounding_cube;
 	uint64_t num_points = 0;
 	Reader::read_bounds_las(input_files, bounding_cube, num_points);
 
-	Logger::log_info("Done reading");
-
 	Logger::log_info("Bounds: " + bounding_cube.to_string());
 
 	Builder b(bounding_cube, num_points, argv[2], 30'000, 30'000, input_files);
 
-	Logger::log_info("Building octree");
+	Logger::log_info("Building octree...");
 	auto sub_start_time = std::chrono::high_resolution_clock::now();
 
 	Node* root_node;
@@ -91,7 +87,7 @@ int main(int argc, char* argv[]) {
 	uint64_t sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - sub_start_time).count();
 	Logger::log_info("Building took " + std::to_string(sub_time) + "ms");
 
-	Logger::log_info("Writing hierarchy");
+	Logger::log_info("Writing hierarchy...");
 	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
 
 	delete root_node;

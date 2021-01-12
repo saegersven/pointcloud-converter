@@ -61,10 +61,6 @@ bool BufferedPointReader::read_point_las(FILE* f, Point& p) {
 	p.x = x * las_scale_x + las_offset_x;
 	p.y = y * las_scale_y + las_offset_y;
 	p.z = z * las_scale_z + las_offset_z;
-	
-	p.x = x * las_scale_x;
-	p.y = y * las_scale_y;
-	p.z = z * las_scale_z;
 
 	las_num_points++;
 
