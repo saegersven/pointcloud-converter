@@ -88,7 +88,6 @@ void Builder::ic_split_node(Node* node) {
 		}
 
 		node->num_points = ic_sample_node(node);
-		std::vector<Point>().swap(node->points); // Clear points from memory
 
 		for (int i = 0; i < 8; i++) {
 			if (node->child_nodes_mask & (1 << i)) {

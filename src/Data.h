@@ -36,8 +36,8 @@ struct Node {
 	std::string id;
 	uint64_t num_points;
 	std::vector<Point> points; // Only used when splitting points in-core
-	// Bit mask, the rightmost bit is the first node, the leftmost corresponds to the eighth child node
 	uint64_t byte_index;
+	// Bit mask, the rightmost bit is the first node, the leftmost corresponds to the eighth child node
 	uint8_t child_nodes_mask;
 	uint8_t num_child_nodes;
 	// Indices of the nodes:
