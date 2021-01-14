@@ -23,6 +23,9 @@ void LasPointReader::open(std::string filename) {
 		num_points = legacy_num_points;
 	}
 
+	fseek(file, 104, SEEK_SET);
+	fread(&point_format, sizeof(uint8_t), 1, file);
+
 	fseek(file, 131, SEEK_SET);
 	fread(&scale_x, sizeof(double), 1, file);
 	fread(&scale_y, sizeof(double), 1, file);
@@ -39,6 +42,7 @@ void LasPointReader::open(std::string filename) {
 	fread(&max_z, sizeof(double), 1, file);
 	fread(&min_z, sizeof(double), 1, file);
 
+
 	fseek(file, first_point_offset, SEEK_SET); // Jump to the first point to continue
 }
 
@@ -54,12 +58,25 @@ Point LasPointReader::read_point() {
 	cx = fread(&x, sizeof(int32_t), 1, file);
 	cy = fread(&y, sizeof(int32_t), 1, file);
 	cz = fread(&z, sizeof(int32_t), 1, file);
-	fseek(file, skip_bytes, SEEK_CUR);
 	if (!(cx && cy && cz)) throw std::runtime_error("Unexpected end of file");
 
 	p.x = x * scale_x + offset_x;
 	p.y = y * scale_y + offset_y;
 	p.z = z * scale_z + offset_z;
+
+	if (point_format == 2) { // It has colors!
+		fseek(file, skip_bytes - 3 * sizeof(uint16_t), SEEK_CUR);
+		cx = fread(&p.r, sizeof(uint16_t), 1, file);
+		cy = fread(&p.g, sizeof(uint16_t), 1, file);
+		cz = fread(&p.b, sizeof(uint16_t), 1, file);
+	}
+	else {
+		fseek(file, skip_bytes, SEEK_CUR);
+		p.r = 0;
+		p.g = 0;
+		p.b = 0;
+	}
+	if (!(cx && cy && cz)) throw std::runtime_error("Unexpected end of file");
 
 	points_read++;
 

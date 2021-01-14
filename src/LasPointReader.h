@@ -10,6 +10,7 @@ private:
 	double min_x, max_x, min_y, max_y, min_z, max_z;
 	uint32_t first_point_offset;
 	uint16_t skip_bytes;
+	uint8_t point_format;
 
 public:
 	void open(std::string filename) override;

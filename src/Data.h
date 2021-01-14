@@ -7,9 +7,8 @@
 #define POINT_FILE_FORMAT_PTS 2
 
 struct Point {
-	float x;
-	float y;
-	float z;
+	float x, y, z;
+	uint16_t r, g, b;
 };
 
 struct Bounds {
