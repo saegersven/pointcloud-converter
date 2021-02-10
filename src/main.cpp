@@ -21,6 +21,18 @@ void fail(ErrCode code) {
 	exit((int)code);
 }
 
+#if _DEBUG
+void count_points(Node* node, uint64_t& points, uint64_t& nodes) {
+	points += node->num_points;
+	nodes++;
+	for (int i = 0; i < 8; i++) {
+		if (node->child_nodes_mask & (1 << i)) {
+			count_points(node->child_nodes[i], points, nodes);
+		}
+	}
+}
+#endif
+
 int main(int argc, char* argv[]) {
 	Logger::add_thread_alias("MAIN");
 
@@ -89,6 +101,15 @@ int main(int argc, char* argv[]) {
 	Logger::log_info("Writing hierarchy...");
 	write_hierarchy(root_node, std::string(argv[2]) + "/hierarchy.bin");
 
+#if _DEBUG
+	// Count all points for debugging purposes
+	uint64_t total_points = 0;
+	uint64_t total_nodes = 0;
+	count_points(root_node, total_points, total_nodes);
+	Logger::log_info("Total points:\t" + std::to_string(total_points));
+	Logger::log_info("Total nodes:\t" + std::to_string(total_nodes));
+#endif
+
 	delete root_node;
 
 	sub_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
@@ -96,5 +117,7 @@ int main(int argc, char* argv[]) {
 
 	Logger::log_info("Average throughput: " + std::to_string((int)(num_points / (sub_time / 1000.0))) + "P/s");
 
+#if _DEBUG
 	std::cin.get();
+#endif
 }

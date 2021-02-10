@@ -1,9 +1,12 @@
 #include "Builder.h"
 
+#define MAX_POINTS_IN_CORE 80'000'000
+
 void Builder::ic_load_points(Node* node) {
 	FILE* points_file = fopen(get_full_point_file(node->id, output_path).c_str(), "rb");
 	if (!points_file) throw std::runtime_error("Could not open file");
 
+	num_points_in_core += node->num_points;
 	node->points.resize(node->num_points);
 
 	Point p;
@@ -66,10 +69,9 @@ uint64_t Builder::ic_sample_node(Node* node) {
 void Builder::ic_split_node(Node* node, bool is_async) {
 	if (node->num_points > max_node_size) {
 		if (node->num_points > 1'000'000 && !is_async) {
-			futures.push_back(std::async(std::launch::async, [this, node] {
-				Logger::add_thread_alias("BLDA");
+			pool.add_job([this, node] {
 				ic_split_node(node, true);
-			}));
+			});
 			return;
 		}
 		std::vector<Point> child_points[8];
@@ -123,25 +125,23 @@ void Builder::ic_split_node(Node* node, bool is_async) {
 
 void Builder::write_node(Node* node, bool in_core) {
 	pool.add_job([this, node, in_core] {
-		while (open_octree_files >= 32) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		//auto start = std::chrono::high_resolution_clock::now();
+		//octree_file_lock.lock();
+		if (!in_core) return;
 
-		FILE* octree_file = fopen(octree_file_path.c_str(), "wb");
+		FILE* octree_file = fopen(get_full_point_file(node->id, output_path).c_str(), "wb");
 		if (!octree_file) THROW_FILE_OPEN_ERROR;
 
-		octree_file_lock.lock();
-		open_octree_files++;
-		node->byte_index = octree_file_cursor;
-		octree_file_cursor += node->num_points * sizeof(struct Point);
-		octree_file_lock.unlock();
+		//open_octree_files++;
+		//node->byte_index = octree_file_cursor;
+		//octree_file_cursor += node->num_points * sizeof(struct Point);
 
-		fseek(octree_file, node->byte_index, SEEK_SET);
-		if (in_core) {
-			fwrite(&node->points[0], sizeof(struct Point), node->points.size(), octree_file);
+		//fseek(octree_file, node->byte_index, SEEK_SET);
+		fwrite(&node->points[0], sizeof(struct Point), node->points.size(), octree_file);
 
-			std::vector<Point>().swap(node->points);
-			num_points_in_core -= node->points.size();
-		}
-		else {
+		{ std::vector<Point>().swap(node->points); }
+		num_points_in_core -= node->num_points;
+		/*else {
 			std::string path = get_full_point_file(node->id, output_path);
 			FILE* node_points_file = fopen(path.c_str(), "rb");
 			if (!node_points_file) THROW_FILE_OPEN_ERROR;
@@ -154,9 +154,12 @@ void Builder::write_node(Node* node, bool in_core) {
 			fclose(node_points_file);
 
 			std::filesystem::remove(path);
-		}
+		}*/
 		fclose(octree_file);
-		open_octree_files--;
+		//uint64_t end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count();
+		//open_octree_files--;
+
+		//octree_file_lock.unlock();
 	});
 	//writer.add(node, in_core);
 }
@@ -167,19 +170,18 @@ void Builder::split_node(Node* node, bool is_async) {
 
 void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> input_files) {
 	if (node->num_points > max_node_size) {
-		if (node->num_points < 5'000'000) {
-			if (num_points_in_core < 75'000'000) { // Ensure that a maximum of ~80M points are in memory at the same time
-				// Split this node in-core
-				ic_load_points(node);
-				num_points_in_core += node->points.size();
+		if (node->id != "" && num_points_in_core.load() + node->num_points < MAX_POINTS_IN_CORE) {
+			//if (num_points_in_core < 75'000'000) { // Ensure that a maximum of ~80M points are in memory at the same time
+			// Split this node in-core
+			ic_load_points(node);
 
-				std::filesystem::remove(get_full_point_file(node->id, output_path));
+			std::filesystem::remove(get_full_point_file(node->id, output_path));
 
-				ic_split_node(node, false);
-				return;
-			}
+			ic_split_node(node, false);
+			return;
+			//}
 		}
-		else if (node->num_points > 7'500'000 && !is_async) {
+		else if (!is_async) {
 			// Run async
 			pool.add_job([this, node] {
 				Logger::add_thread_alias("BLDA");
@@ -280,7 +282,8 @@ Node* Builder::build() {
 	root_node->child_nodes_mask = 0;
 	root_node->num_points = num_points;
 
-	bool status_terminated = false;
+	uint64_t total_points = root_node->num_points;
+	/*bool status_terminated = false;
 	std::thread status_thread([this, root_node, status_terminated] {
 		Logger::add_thread_alias("BUILD");
 		std::chrono::milliseconds wait_for(3000);
@@ -292,12 +295,12 @@ Node* Builder::build() {
 			std::this_thread::sleep_for(wait_for);
 		}
 	});
-	status_thread.detach();
+	status_thread.detach();*/
 
 	//writer.start(output_path);
 
-	split_node(root_node, true /*Don't make the root node async*/,
-		true /*The root node is directly split from the input las files*/, las_input_paths);
+	pool.add_job([this, root_node]() {split_node(root_node, true /*Don't make the root node async*/,
+		true /*The root node is directly split from the input las files*/, las_input_paths); });
 
 	/*std::chrono::milliseconds wait_span(500);
 	while (futures.size() > 0) {
@@ -313,7 +316,19 @@ Node* Builder::build() {
 	//pool.wait();
 	//writer.done();
 
-	Logger::log_info("Done building                       ");
+	uint64_t last_points_processed = 0;
+	while (points_processed + 1 < total_points) {
+		uint64_t throughput = points_processed - last_points_processed;
+		last_points_processed = points_processed;
+		Logger::log_return(std::to_string((int)((double)points_processed / (double)total_points * 100.0)) + "% ("
+			+ std::to_string(points_processed) + "/" + std::to_string(total_points) + ") [In-Core: "
+			+ std::to_string(num_points_in_core) + " points; Jobs: " + std::to_string(pool.num_jobs())
+			+ "; Throughput: " + std::to_string(throughput) + "P/s]                 \r");
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	}
+	pool.wait(); // Wait for all jobs to finish
+
+	Logger::log_info("Done building                                              ");
 
 	return root_node;
 }
