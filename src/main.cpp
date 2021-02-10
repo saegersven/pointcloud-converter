@@ -1,10 +1,10 @@
 #include <string>
 #include <filesystem>
 #include "Logger.h"
-#include "Reader.h"
 #include "Builder.h"
 #include "Utils.h"
 #include "HierarchyWriter.h"
+#include "LasPointReader.h"
 
 //#define SKIP_READ
 #define SKIP_BOUNDS { 372.735f, 36.274f, 568.365f, 134.426f }
@@ -61,13 +61,12 @@ int main(int argc, char* argv[]) {
 
 	//Reader r(input_files, argv[2]);
 
-	Cube bounding_cube;
 	uint64_t num_points = 0;
-	Reader::read_bounds_las(input_files, bounding_cube, num_points);
+	Cube bounding_cube = LasPointReader::get_big_bounding_cube(input_files, num_points);
 
 	Logger::log_info("Bounds: " + bounding_cube.to_string());
 
-	Builder b(bounding_cube, num_points, argv[2], 30'000, 30'000, input_files);
+	Builder b(bounding_cube, num_points, argv[2], 15'000, 15'000, input_files);
 
 	Logger::log_info("Building octree...");
 	auto sub_start_time = std::chrono::high_resolution_clock::now();

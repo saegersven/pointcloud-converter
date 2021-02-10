@@ -18,4 +18,7 @@ public:
 	Point read_point() override;
 
 	Cube get_bounding_cube();
+	Bounds get_bounds();
+
+	static Cube get_big_bounding_cube(std::vector<std::string> input_files, uint64_t& total_points);
 };

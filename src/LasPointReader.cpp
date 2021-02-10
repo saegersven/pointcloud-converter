@@ -92,3 +92,33 @@ Cube LasPointReader::get_bounding_cube() {
 	c.size = std::max(max_x - min_x, std::max(max_y - min_y, max_z - min_z));
 	return c;
 }
+
+Bounds LasPointReader::get_bounds() {
+	return { (float)min_x, (float)min_y, (float)min_z, (float)max_x, (float)max_y, (float)max_z };
+}
+
+Cube LasPointReader::get_big_bounding_cube(std::vector<std::string> input_files, uint64_t& total_points) {
+	Bounds g_bounds;
+	for (std::string s : input_files) {
+		LasPointReader r;
+		r.open(s);
+		total_points += r.num_points;
+		Bounds b = r.get_bounds();
+		if (b.max_x > g_bounds.max_x) g_bounds.max_x = b.max_x;
+		if (b.max_y > g_bounds.max_y) g_bounds.max_y = b.max_y;
+		if (b.max_z > g_bounds.max_z) g_bounds.max_z = b.max_z;
+
+		if (b.min_x < g_bounds.min_x) g_bounds.min_x = b.min_x;
+		if (b.min_y < g_bounds.min_y) g_bounds.min_y = b.min_y;
+		if (b.min_z < g_bounds.min_z) g_bounds.min_z = b.min_z;
+	}
+	Cube c;
+	// Cast to double to avoid overflow when adding
+	c.center_x = (float)(((double)g_bounds.max_x + (double)g_bounds.min_x) / 2.0);
+	c.center_y = (float)(((double)g_bounds.max_y + (double)g_bounds.min_y) / 2.0);
+	c.center_z = (float)(((double)g_bounds.max_z + (double)g_bounds.min_z) / 2.0);
+
+	c.size = std::max(g_bounds.max_x - g_bounds.min_x,
+		std::max(g_bounds.max_y - g_bounds.min_y, g_bounds.max_z - g_bounds.min_z));
+	return c;
+}

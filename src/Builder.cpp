@@ -55,17 +55,27 @@ uint64_t Builder::ic_sample_node(Node* node) {
 	node->points.swap(sampled_points);
 	node->num_points = node->points.size();
 
+	//writer.add_num_points_in_core(node->points.size());
+	num_points_in_core += node->points.size();
+
 	write_node(node, true);
 
 	return to_sample;
 }
 
-void Builder::ic_split_node(Node* node) {
+void Builder::ic_split_node(Node* node, bool is_async) {
 	if (node->num_points > max_node_size) {
-		std::vector<Point> child_points[8];
-		for (int i = 0; i < 8; i++) {
-			child_points[i].reserve(node->num_points / 4);
+		if (node->num_points > 1'000'000 && !is_async) {
+			futures.push_back(std::async(std::launch::async, [this, node] {
+				Logger::add_thread_alias("BLDA");
+				ic_split_node(node, true);
+			}));
+			return;
 		}
+		std::vector<Point> child_points[8];
+		/*for (int i = 0; i < 8; i++) {
+			child_points[i].reserve(node->num_points / 4);
+		}*/
 
 		for (uint64_t i = 0; i < node->num_points; i++) {
 			child_points[find_child_node_index(node->bounds, node->points[i])].push_back(node->points[i]);
@@ -91,7 +101,7 @@ void Builder::ic_split_node(Node* node) {
 
 		for (int i = 0; i < 8; i++) {
 			if (node->child_nodes_mask & (1 << i)) {
-				ic_split_node(node->child_nodes[i]);
+				ic_split_node(node->child_nodes[i], false);
 			}
 		}
 	}
@@ -112,32 +122,43 @@ void Builder::ic_split_node(Node* node) {
 }
 
 void Builder::write_node(Node* node, bool in_core) {
-	writer.add(node, in_core);
-	/*if (!octree_file) {
-		octree_file = fopen(get_octree_file(output_path).c_str(), "ab");
-		if (!octree_file) throw std::runtime_error("Could not open file");
-	}
-	octree_file_lock.lock();
-	node->byte_index = octree_file_cursor * sizeof(struct Point);
+	pool.add_job([this, node, in_core] {
+		while (open_octree_files >= 32) std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-	if (in_core) {
-		fwrite(&node->points[0], sizeof(struct Point), node->points.size(), octree_file);
-		std::vector<Point>().swap(node->points);
-	}
-	else {
-		std::string points_file_path = get_full_point_file(node->id, output_path);
-		FILE* node_points_file = fopen(points_file_path.c_str(), "rb");
-		Point p;
-		for (uint64_t i = 0; i < node->num_points; i++) {
-			fread(&p, sizeof(struct Point), 1, node_points_file);
-			fwrite(&p, sizeof(struct Point), 1, octree_file);
+		FILE* octree_file = fopen(octree_file_path.c_str(), "wb");
+		if (!octree_file) THROW_FILE_OPEN_ERROR;
+
+		octree_file_lock.lock();
+		open_octree_files++;
+		node->byte_index = octree_file_cursor;
+		octree_file_cursor += node->num_points * sizeof(struct Point);
+		octree_file_lock.unlock();
+
+		fseek(octree_file, node->byte_index, SEEK_SET);
+		if (in_core) {
+			fwrite(&node->points[0], sizeof(struct Point), node->points.size(), octree_file);
+
+			std::vector<Point>().swap(node->points);
+			num_points_in_core -= node->points.size();
 		}
-		fclose(node_points_file);
-		std::filesystem::remove(points_file_path);
-	}
+		else {
+			std::string path = get_full_point_file(node->id, output_path);
+			FILE* node_points_file = fopen(path.c_str(), "rb");
+			if (!node_points_file) THROW_FILE_OPEN_ERROR;
 
-	octree_file_cursor += node->num_points;
-	octree_file_lock.unlock();*/
+			for (uint64_t i = 0; i < node->num_points; i++) {
+				Point p;
+				fread(&p, sizeof(struct Point), 1, node_points_file);
+				fwrite(&p, sizeof(struct Point), 1, octree_file);
+			}
+			fclose(node_points_file);
+
+			std::filesystem::remove(path);
+		}
+		fclose(octree_file);
+		open_octree_files--;
+	});
+	//writer.add(node, in_core);
 }
 
 void Builder::split_node(Node* node, bool is_async) {
@@ -146,27 +167,29 @@ void Builder::split_node(Node* node, bool is_async) {
 
 void Builder::split_node(Node* node, bool is_async, bool is_las, std::vector<std::string> input_files) {
 	if (node->num_points > max_node_size) {
-		if (node->num_points < 2'000'000) {
-			if (num_points_in_core < 38'000'000) { // Ensure that only ~40M points are in memory at the same time
-				uint64_t num_points_to_load = node->num_points;
-
-				num_points_in_core += num_points_to_load;
+		if (node->num_points < 5'000'000) {
+			if (num_points_in_core < 75'000'000) { // Ensure that a maximum of ~80M points are in memory at the same time
 				// Split this node in-core
 				ic_load_points(node);
+				num_points_in_core += node->points.size();
 
 				std::filesystem::remove(get_full_point_file(node->id, output_path));
 
-				ic_split_node(node);
-				num_points_in_core -= num_points_to_load;
+				ic_split_node(node, false);
 				return;
 			}
 		}
-		else if (node->num_points > 5'000'000 && !is_async) {
+		else if (node->num_points > 7'500'000 && !is_async) {
 			// Run async
-			futures.push_back(std::async(std::launch::async, [this, node] {
+			pool.add_job([this, node] {
 				Logger::add_thread_alias("BLDA");
-				split_node(node, true);
-			}));
+				try {
+					split_node(node, true);
+				}
+				catch (const std::exception exc) {
+					Logger::log_error("Error splitting Node: " + std::string(exc.what()));
+				}
+			});
 			return;
 		}
 
@@ -271,12 +294,12 @@ Node* Builder::build() {
 	});
 	status_thread.detach();
 
-	writer.start(output_path);
+	//writer.start(output_path);
 
 	split_node(root_node, true /*Don't make the root node async*/,
 		true /*The root node is directly split from the input las files*/, las_input_paths);
 
-	std::chrono::milliseconds wait_span(500);
+	/*std::chrono::milliseconds wait_span(500);
 	while (futures.size() > 0) {
 		for (int i = 0; i < futures.size(); i++) {
 			if (futures[i].wait_for(wait_span) != std::future_status::ready) {
@@ -286,25 +309,25 @@ Node* Builder::build() {
 			futures.erase(futures.begin() + i);
 			i--;
 		}
-	}
-	writer.done();
+	}*/
+	//pool.wait();
+	//writer.done();
 
-	status_terminated = true;
 	Logger::log_info("Done building                       ");
 
 	return root_node;
 }
 
 Builder::Builder(Cube bounding_cube, uint64_t num_points, std::string output_path,
-	uint32_t max_node_size, uint32_t sampled_node_size, std::vector<std::string> las_input_paths) : futures(0) {
+	uint32_t max_node_size, uint32_t sampled_node_size, std::vector<std::string> las_input_paths) : futures(0), pool(32) {
 	this->bounding_cube = bounding_cube;
 	this->num_points = num_points;
 	this->output_path = output_path;
 	this->max_node_size = max_node_size;
 	this->sampled_node_size = sampled_node_size;
-	this->num_points_in_core = 0;
 	this->points_processed = 0;
 	this->las_input_paths = las_input_paths;
 	octree_file = 0;
 	octree_file_cursor = 0;
+	octree_file_path = get_octree_file(output_path);
 }

@@ -2,6 +2,8 @@
 #include <filesystem>
 #include <string>
 
+#define THROW_FILE_OPEN_ERROR throw std::runtime_error("Could not open file (" + std::string(strerror(errno)) + ")")
+
 bool is_directory_empty(const std::string& path);
 
 bool check_file(const std::string& filename);
