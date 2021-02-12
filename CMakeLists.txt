@@ -6,5 +6,4 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories(${PROJECT_SOURCE_DIR})
 add_executable(${PROJECT_NAME}
-src/main.cpp src/Utils.cpp src/Reader.cpp src/Builder.cpp
-src/BufferedPointReader.cpp src/BufferedPointWriter.cpp src/Logger.cpp)
+src/main.cpp src/Utils.cpp src/ThreadPool.cpp src/RawPointReader.cpp src/Logger.cpp src/LasPointReader.cpp src/Builder.cpp src/AsyncOctreeWriter.cpp)
